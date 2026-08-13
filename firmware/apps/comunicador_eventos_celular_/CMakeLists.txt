@@ -14,4 +14,4 @@ include_directories(${PROJECT_NAME} ../../drivers_hal)
 set(COMPONENTS main middleware board_support drivers_hal)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(x_template)
+project(comunicador_eventos_celular_)
