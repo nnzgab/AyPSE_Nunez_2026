@@ -15,6 +15,9 @@
         {
             "path": "./drivers_hal"
         },
+        {
+            "path": "apps/comunicador_eventos_celular_"
+        }
     ],
     "settings": {
         "idf.portWin": "COM14",
@@ -24,13 +27,10 @@
         "idf.svdFilePath": "${workspaceFolder}/../../esp32c6.svd",
         "idf.openOcdConfigs": [
             "board/esp32c6-builtin.cfg"
-        ],
-        },
+        ]
     },
     "tasks": {
         "version": "2.0.0",
-        "tasks": [
-
-        ]
+        "tasks": []
     }
 }
