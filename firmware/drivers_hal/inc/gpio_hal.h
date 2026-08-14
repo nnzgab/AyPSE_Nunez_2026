@@ -1,148 +1,44 @@
-#ifndef GPIO_MCU_H
-#define GPIO_MCU_H
+/* drivers_hal/inc/uart_hal.h */
+#ifndef UART_HAL_H_
+#define UART_HAL_H_
 
-/** @defgroup hal HAL
- *  @brief Capa de abstraccion de hardware.
- *  @{
- */
-
-/** \brief GPIO driver for the ESP32-C6 Board.
- *
- * @ingroup hal
- *
- * This driver provide functions to configure and handle the ESP32-C6 General
- * Purpose Input-Outputs .
- * 
- * @note GPIO_12 and GPIO_13 are not recommended for use, because using them will
- * overwrite the flash and debug functionalities via USB.
- * 
- * @note GPIO_16 and GPIO_17 are not recommended for use, because using them will
- * overwrite the flash and debug functionalities via UART.
- * 
- * @author Albano Peñalva
- *
- * @section changelog
- *
- * |   Date	    | Description                                    						|
- * |:----------:|:----------------------------------------------------------------------|
- * | 23/10/2023 | Document creation		                         						|
- * | 18/06/2026 | Update documentation		                         					|
- * 
- **/
-
-/*==================[inclusions]=============================================*/
 #include <stdbool.h>
-#include <stdint.h>
-/*==================[macros]=================================================*/
+#include <stddef.h>
+#include "freertos/FreeRTOS.h"
 
-/*==================[typedef]================================================*/
-/**
- * @brief GPIO direction (input or output).
- * 
- */
-typedef enum {
-	GPIO_INPUT = 0, 	/**< Input with pull-up resistor */
-	GPIO_OUTPUT			/**< Output */
-	} io_t;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/**
- * @brief ESP32-C6 available GPIOs (not all of them are available in ESP-EDU)
- * 
- */
-typedef enum gpio_list{
-	GPIO_0=0, 	/**< GPIO0 */
-	GPIO_1, 	/**< GPIO1 */
-	GPIO_2, 	/**< GPIO2 */
-	GPIO_3, 	/**< GPIO3 */
-	GPIO_4, 	/**< GPIO4 */
-	GPIO_5, 	/**< GPIO5 */
-	GPIO_6, 	/**< GPIO6 */
-	GPIO_7, 	/**< GPIO7 */
-	GPIO_8, 	/**< GPIO8 - shared with NeoPixel */
-	GPIO_9, 	/**< GPIO9 */
-	GPIO_10, 	/**< GPIO10 */
-	GPIO_11, 	/**< GPIO11 */
-	GPIO_12, 	/**< GPIO12 - shared with USB_D- */
-	GPIO_13, 	/**< GPIO13 - shared with USB_D+ */
-	GPIO_14, 	/**< not available */
-	GPIO_15, 	/**< GPIO15 */
-	GPIO_16, 	/**< GPIO16 - shared with UART_PC TX */
-	GPIO_17, 	/**< GPIO17 - shared with UART_PC RX */
-	GPIO_18, 	/**< GPIO18 */
-	GPIO_19, 	/**< GPIO19 */
-	GPIO_20, 	/**< GPIO20 */
-	GPIO_21,	/**< GPIO21  */
-	GPIO_22, 	/**< GPIO22  */
-	GPIO_23, 	/**< GPIO23 */
-} gpio_t;
+typedef int uart_hal_port_t; /* 0,1,... */
 
-/*==================[internal data declaration]==============================*/
+typedef struct {
+    uart_hal_port_t port;    /* e.g., 1 for UART1 */
+    int tx_pin;              /* GPIO number for TX (e.g., 18) */
+    int rx_pin;              /* GPIO number for RX (e.g., 19) */
+    int baudrate;            /* e.g., 115200 */
+    size_t rx_buffer_size;   /* bytes for driver RX buffer */
+    size_t tx_buffer_size;   /* bytes for driver TX buffer */
+    bool use_flow_ctrl;      /* false if RTS/CTS not wired */
+} uart_hal_cfg_t;
 
-/*==================[internal functions declaration]=========================*/
-/**
- * @brief GPIO initialization
- * 
- * @param pin GPIO number
- * @param io GPIO direction
- */
-void GPIOInit(gpio_t pin, io_t io);
+/* Inicializa el UART según cfg. Retorna true si OK */
+bool UartHalInit(const uart_hal_cfg_t *cfg);
 
-/**
- * @brief Change GPIO state to high
- * 
- * @param pin GPIO number
- */
-void GPIOOn(gpio_t pin);
+/* Escribe len bytes; espera ticks_to_wait. Retorna bytes escritos o -1 */
+int UartHalWrite(uart_hal_port_t port, const void *data, size_t len, TickType_t ticks_to_wait);
 
-/**
- * @brief Change GPIO state to low
- * 
- * @param pin GPIO number
- */
-void GPIOOff(gpio_t pin);
+/* Lee hasta len bytes; espera ticks_to_wait. Retorna bytes leídos o -1 */
+int UartHalRead(uart_hal_port_t port, void *buf, size_t len, TickType_t ticks_to_wait);
 
-/**
- * @brief Change GPIO state
- * 
- * @param pin GPIO number
- * @param state GPIO state (true: high - false: low)
- */
-void GPIOState(gpio_t pin, bool state);
+/* Vacía buffers */
+void UartHalFlush(uart_hal_port_t port);
 
-/**
- * @brief Invert GPIO state
- * 
- * @param pin GPIO number
- */
-void GPIOToggle(gpio_t pin);
+/* Desinicializa el puerto */
+void UartHalDeinit(uart_hal_port_t port);
 
-/**
- * @brief Reads GPIO state
- * 
- * @param pin 
- * @return true GPIO input high
- * @return false GPIO input low
- */
-bool GPIORead(gpio_t pin);
+#ifdef __cplusplus
+}
+#endif
 
-/**
- * @brief Configure GPIO input interruption
- * 
- * @param pin GPIO number
- * @param ptr_int_func Pointer to callback function
- * @param edge true: positive edge - false: negative edge
- * @param args 
- */
-void GPIOActivInt(gpio_t pin, void *ptr_int_func, bool edge, void *args);
-
-/**
- * @brief GPIO de-initialization
- * 
- */
-void GPIODeinit(void);
-
-/** @} */
-
-#endif /* INC_GPIO_H_ */
-
-/*==================[end of file]============================================*/
+#endif /* UART_HAL_H_ */

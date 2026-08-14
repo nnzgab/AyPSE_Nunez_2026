@@ -1,68 +1,31 @@
-/*! @mainpage Comunicador Eventos Celular
- *
- * @section genDesc General Description
- *
- * Programa de prueba mínimo para compilar el proyecto y verificar el HAL UART.
- *
- * @section hardConn Hardware Connection
- *
- * |    Peripheral  |   ESP32    |
- * |:--------------:|:-----------:|
- * |  UART TX       |  GPIO_X     |
- * |  UART RX       |  GPIO_Y     |
- *
- * @section changelog Changelog
- *
- * |   Date      | Description                                    |
- * |:----------:|:-----------------------------------------------|
- * | 13/08/2026 | Creación del main de prueba                     |
- *
- * @author Gabriel
- *
- */
-
-/*==================[inclusions]=============================================*/
-#include <stdio.h>
-#include <stdint.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "uart_hal.h"
-/*==================[macros and definitions]=================================*/
+#include <string.h>
 
-/*==================[internal data definition]===============================*/
-
-/*==================[internal functions declaration]=========================*/
-
-/*==================[external functions definition]==========================*/
 void app_main(void)
 {
-    printf("Hello world!\n");
-
-    /* Ejemplo opcional: inicializar el HAL UART para comprobar linkeo.
-     * Descomentá si querés probar la inicialización del driver.
-     *
-     * Ajustá uart_num y pines según tu BSP.
-     */
-#if 0
     uart_hal_cfg_t cfg = {
-        .uart_num = 1,
-        .tx_pin = 17,
-        .rx_pin = 16,
+        .port = 1,
+        .tx_pin = 18,
+        .rx_pin = 19,
         .baudrate = 115200,
-        .rx_buffer_size = 256,
-        .tx_buffer_size = 256
+        .rx_buffer_size = 1024,
+        .tx_buffer_size = 1024,
+        .use_flow_ctrl = false
     };
 
-    if (UartHalInit(&cfg)) {
-        printf("UartHalInit OK\n");
-    } else {
-        printf("UartHalInit FAILED\n");
+    if (!UartHalInit(&cfg)) {
+        printf("Uart init failed\n");
+        return;
     }
-#endif
 
-    /* Mantener la aplicación viva */
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+    const char *cmd = "AT\r\n";
+    UartHalWrite(cfg.port, cmd, strlen(cmd), pdMS_TO_TICKS(1000));
+
+    char buf[256];
+    int r = UartHalRead(cfg.port, buf, sizeof(buf)-1, pdMS_TO_TICKS(2000));
+    if (r > 0) {
+        buf[r] = '\0';
+        printf("RX: %s\n", buf);
     }
-}
-/*==================[end of file]============================================*/
+
+    /* dejar driver instalado durante la vida de la app o llamar UartHalDeinit al final */
