@@ -17,6 +17,9 @@
         },
         {
             "path": "./drivers_hal"
+        },
+        {
+            "path": "apps/0_comunicador"
         }
     ],
     "settings": {
