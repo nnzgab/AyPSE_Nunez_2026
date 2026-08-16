@@ -1,39 +1,32 @@
-/*! @mainpage Template
- *
- * @section genDesc General Description
- *
- * This section describes how the program works.
- *
- * <a href="https://drive.google.com/...">Operation Example</a>
- *
- * @section hardConn Hardware Connection
- *
- * |    Peripheral  |   ESP32   	|
- * |:--------------:|:--------------|
- * | 	PIN_X	 	| 	GPIO_X		|
- *
- *
- * @section changelog Changelog
- *
- * |   Date	    | Description                                    |
- * |:----------:|:-----------------------------------------------|
- * | 12/09/2023 | Document creation		                         |
- *
- * @author Albano Peñalva (albano.penalva@uner.edu.ar)
- *
- */
-
-/*==================[inclusions]=============================================*/
 #include <stdio.h>
-#include <stdint.h>
-/*==================[macros and definitions]=================================*/
+#include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_log.h"
+#include "uart_hal.h"
 
-/*==================[internal data definition]===============================*/
+static const char *TAG = "0_comunicador";
 
-/*==================[internal functions declaration]=========================*/
+void app_main(void)
+{
+    ESP_LOGI(TAG, "Starting application (HAL)");
+    UartHalInit(115200);
+    ESP_LOGI(TAG, "UART HAL initialized");
 
-/*==================[external functions definition]==========================*/
-void app_main(void){
-	printf("modificacion arranca funcionando!\n");
+    const char *msg = "Hello from HAL\n";
+    char rx;
+
+    while (1) {
+        /* Envío periódico para verificar transmisión */
+        UartHalWriteBytes(msg, strlen(msg));
+
+        /* Intento de lectura: si llega algo, hago eco inmediato */
+        int r = UartHalReadByte(&rx); // timeout 100 ms
+        if (r > 0) {
+            ESP_LOGI(TAG, "Received byte: 0x%02x '%c'", (uint8_t)rx, (rx >= 32 && rx < 127) ? rx : '.');
+            UartHalWriteByte(rx); // eco
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }
-/*==================[end of file]============================================*/
