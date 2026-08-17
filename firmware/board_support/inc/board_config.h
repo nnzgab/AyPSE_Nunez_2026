@@ -11,7 +11,6 @@
 
 /*==================[inclusions]=============================================*/
 #include <stdint.h>   /* solo headers estándar en headers públicos */
-#include "gpio_hal.h"
 /*==================[macros]=================================================*/
 /** @name Mapeo de Pines de LEDs
  *  @{
@@ -33,23 +32,16 @@
 #define UART_HAL_RX_PIN  UART1_RX_PIN
 /** @} */
 
+
+/* Pines del módulo Quectel (ejemplo) */
+#define QUECTEL_PWRKEY_PIN  21  /////////////////////////////////
+
 /*==================[typedef]================================================*/
 
 /*==================[external data declaration]==============================*/
 
 /*==================[external functions declaration]=========================*/
 
-/** @} */
-/** @} */
-
-#include "board_config.h"
-#include "uart_hal.h"
-
-void board_init(void)
-{
-    // otros inits de la placa...
-    UartHalInitWithPins(115200, UART1_TX_PIN, UART1_RX_PIN);
-}
 
 
 #endif /* BOARD_CONFIG_H */

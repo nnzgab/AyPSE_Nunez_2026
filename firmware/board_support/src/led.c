@@ -12,6 +12,7 @@
 /*==================[inclusions]=============================================*/
 #include "led.h"
 #include "board_config.h"
+#include "gpio_hal.h" //por que si no es necesario?
 /*==================[macros and definitions]=================================*/
 
 /*==================[internal data declaration]==============================*/

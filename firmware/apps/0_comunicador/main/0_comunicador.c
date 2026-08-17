@@ -4,6 +4,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "uart_hal.h"
+extern void StartBlinkLed1(void);
 
 static const char *TAG = "0_comunicador";
 
@@ -12,6 +13,10 @@ void app_main(void)
     ESP_LOGI(TAG, "Starting application (HAL)");
     UartHalInit(115200);
     ESP_LOGI(TAG, "UART HAL initialized");
+
+    /* Arranca el blink en background sin bloquear */
+    StartBlinkLed1();
+
 
     const char *msg = "Hello from HAL\n";
     char rx;
