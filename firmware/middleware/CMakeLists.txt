@@ -1,7 +1,7 @@
 idf_build_get_property(target IDF_TARGET)
 
 # Always compiled source files
-set(srcs "src/animation.c"
+set(srcs "src/event_frame.c"
     )
 
 # Always included headers

@@ -21,7 +21,7 @@ static const char *UART_TAG = "uart_hal";
 #define UART_HAL_RX_PIN 19
 #endif
 
-#define UART_RX_BUF_SIZE 512
+#define UART_RX_BUF_SIZE 2048
 
 static void uart_hal_configure_pins(int tx_pin, int rx_pin)
 {

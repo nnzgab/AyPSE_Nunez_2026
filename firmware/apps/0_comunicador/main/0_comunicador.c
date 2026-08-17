@@ -3,34 +3,62 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-#include "uart_hal.h"
-extern void StartBlinkLed1(void);
 
-static const char *TAG = "0_comunicador";
+/* Inclusiones correctas: Solo BSP y Middleware (Cero HAL en la App) */
+#include "led.h"
+#include "panic_button.h"
+#include "cellular.h"
+#include "event_frame.h"
+
+static const char *TAG = "cellular_gateway";
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Starting application (HAL)");
-    UartHalInit(115200);
-    ESP_LOGI(TAG, "UART HAL initialized");
+    ESP_LOGI(TAG, "Starting Cellular Gateway Application...");
 
-    /* Arranca el blink en background sin bloquear */
-    StartBlinkLed1();
+    /* 1. Inicialización de periféricos a través de la capa BSP */
+    LedInit();
+    PanicButtonInit();
+    
+    if (CellularInit()) {
+        ESP_LOGI(TAG, "Cellular module initialized successfully");
+    } else {
+        ESP_LOGE(TAG, "Failed to initialize cellular module");
+    }
 
+    /* Configurar PDP del operador celular */
+    if (CellularPdpConfigure("internet.gprs.com")) {
+        CellularPdpActivate();
+    }
 
-    const char *msg = "Hello from HAL\n";
-    char rx;
+    uint8_t tx_buffer[256];
+    size_t buffer_len;
 
     while (1) {
-        /* Envío periódico para verificar transmisión */
-        UartHalWriteBytes(msg, strlen(msg));
+        /* 2. Ejemplo de lógica usando el botón de pánico de la BSP */
+        if (PanicButtonIsPressed()) {
+            ESP_LOGW(TAG, "Panic button pressed! Dispatching event frame...");
+            
+            /* Encender LED de pánico como feedback visual */
+            LedOn(LED_PANIC);
 
-        /* Intento de lectura: si llega algo, hago eco inmediato */
-        int r = UartHalReadByte(&rx); // timeout 100 ms
-        if (r > 0) {
-            ESP_LOGI(TAG, "Received byte: 0x%02x '%c'", (uint8_t)rx, (rx >= 32 && rx < 127) ? rx : '.');
-            UartHalWriteByte(rx); // eco
+            /* Construir la trama a través del Middleware */
+            buffer_len = sizeof(tx_buffer);
+            if (EventFrameBuild(1, "TOKEN_XYZ123", tx_buffer, &buffer_len)) {
+                
+                /* Enviar mediante el flujo de TCP con reintentos y fallback a SMS */
+                if (EventFrameDispatch(tx_buffer, buffer_len)) {
+                    ESP_LOGI(TAG, "Event dispatched successfully (TCP or SMS)");
+                } else {
+                    ESP_LOGE(TAG, "Critical: Failed to dispatch event via TCP and SMS");
+                }
+            }
+
+            LedOff(LED_PANIC);
         }
+
+        /* Parpadeo periódico del LED del Quectel para indicar que el sistema está vivo */
+        LedToggle(LED_QUECTEL);
 
         vTaskDelay(pdMS_TO_TICKS(1000));
     }

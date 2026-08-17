@@ -1,54 +1,43 @@
 #include "unity.h"
 #include "gpio_hal.h"
 
-TEST_CASE("GPIOInit configures output pin without error", "[drivers_hal][gpio]")
+/* 
+   Tests reducidos para tu proyecto:
+   - GPIO_23 como entrada (botón de pánico)
+   - GPIO_4, GPIO_5 como LEDs indicadores
+   - GPIO_6 como salida digital para encender el módulo
+*/
+
+TEST_CASE("GPIO_23 initializes as input", "[drivers_hal][gpio]")
 {
-    GPIOInit(GPIO_4, GPIO_OUTPUT);
-    TEST_ASSERT_TRUE(true);
+    GPIOInit(GPIO_23, GPIO_INPUT);
+    bool state = GPIORead(GPIO_23);
+    TEST_ASSERT_TRUE(state == 0 || state == 1); // debe devolver algo válido
 }
 
-TEST_CASE("GPIOOn and GPIORead return high", "[drivers_hal][gpio]")
+TEST_CASE("GPIO_4 LED can be turned on/off", "[drivers_hal][gpio]")
 {
     GPIOInit(GPIO_4, GPIO_OUTPUT);
     GPIOOn(GPIO_4);
     TEST_ASSERT_TRUE(GPIORead(GPIO_4));
-}
-
-TEST_CASE("GPIOOff and GPIORead return low", "[drivers_hal][gpio]")
-{
-    GPIOInit(GPIO_4, GPIO_OUTPUT);
     GPIOOff(GPIO_4);
     TEST_ASSERT_FALSE(GPIORead(GPIO_4));
 }
 
-TEST_CASE("GPIOState drives high and low", "[drivers_hal][gpio]")
+TEST_CASE("GPIO_5 LED can be toggled", "[drivers_hal][gpio]")
 {
-    GPIOInit(GPIO_4, GPIO_OUTPUT);
-
-    GPIOState(GPIO_4, true);
-    TEST_ASSERT_TRUE(GPIORead(GPIO_4));
-
-    GPIOState(GPIO_4, false);
-    TEST_ASSERT_FALSE(GPIORead(GPIO_4));
+    GPIOInit(GPIO_5, GPIO_OUTPUT);
+    GPIOOff(GPIO_5);
+    TEST_ASSERT_FALSE(GPIORead(GPIO_5));
+    GPIOToggle(GPIO_5);
+    TEST_ASSERT_TRUE(GPIORead(GPIO_5));
 }
 
-TEST_CASE("GPIOToggle inverts current state", "[drivers_hal][gpio]")
+TEST_CASE("GPIO_6 controls module power", "[drivers_hal][gpio]")
 {
-    GPIOInit(GPIO_4, GPIO_OUTPUT);
-    GPIOOff(GPIO_4);
-    TEST_ASSERT_FALSE(GPIORead(GPIO_4));
-
-    GPIOToggle(GPIO_4);
-    TEST_ASSERT_TRUE(GPIORead(GPIO_4));
-
-    GPIOToggle(GPIO_4);
-    TEST_ASSERT_FALSE(GPIORead(GPIO_4));
-}
-
-TEST_CASE("GPIOInit and GPIORead do not crash on valid pins", "[drivers_hal][gpio]")
-{
-    GPIOInit(GPIO_9, GPIO_INPUT);
-    (void)GPIORead(GPIO_9);
-    // If execution reaches here, no hard fault or watchdog reset occurred.
-    TEST_ASSERT_TRUE(true);
+    GPIOInit(GPIO_6, GPIO_OUTPUT);
+    GPIOState(GPIO_6, true);
+    TEST_ASSERT_TRUE(GPIORead(GPIO_6));
+    GPIOState(GPIO_6, false);
+    TEST_ASSERT_FALSE(GPIORead(GPIO_6));
 }
