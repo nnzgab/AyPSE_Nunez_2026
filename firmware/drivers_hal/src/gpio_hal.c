@@ -15,6 +15,12 @@
 #include "driver/gpio.h"
 /*==================[macros and definitions]=================================*/
 #define GPIO_QTY 	24
+
+static bool GPIOIsValid(gpio_t pin)
+{
+    return (pin < GPIO_QTY) && (pin != GPIO_14);
+}
+
 typedef struct{
 	uint64_t pin;				/*!< GPIO pin */
 	gpio_mode_t mode;			/*!< Input/Output mode */
@@ -58,13 +64,16 @@ digital_io_t gpio_list[GPIO_QTY] = {
 
 /*==================[external functions definition]==========================*/
 void GPIOInit(gpio_t pin, io_t io){
-	if((pin == GPIO_14) || (pin > GPIO_23)){
-		return;
-	}
+	if(!GPIOIsValid(pin)){
+        return;
+    }
 	if(io == GPIO_INPUT){
 		gpio_list[pin].mode = GPIO_MODE_INPUT;
 	} else if(io == GPIO_OUTPUT){
 		gpio_list[pin].mode = GPIO_MODE_OUTPUT;
+	}
+	else{
+		return;
 	}
 	gpio_reset_pin(gpio_list[pin].pin);
 	gpio_set_direction(gpio_list[pin].pin, gpio_list[pin].mode);
@@ -72,6 +81,9 @@ void GPIOInit(gpio_t pin, io_t io){
 }
 
 void GPIOOn(gpio_t pin){
+	if(!GPIOIsValid(pin)){
+        return;
+    }
 	gpio_list[pin].state = true;
 	gpio_set_level(gpio_list[pin].pin, gpio_list[pin].state);
 }
@@ -109,8 +121,6 @@ void GPIOActivInt(gpio_t pin, void *ptr_int_func, bool edge, void *args){
     gpio_isr_handler_add(gpio_list[pin].pin, ptr_int_func, (void *)args);	
 }
 
-void GPIODeinit(void){
-	
-}
+
 
 /*==================[end of file]============================================*/

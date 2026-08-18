@@ -135,11 +135,7 @@ bool GPIORead(gpio_t pin);
  */
 void GPIOActivInt(gpio_t pin, void *ptr_int_func, bool edge, void *args);
 
-/**
- * @brief GPIO de-initialization
- * 
- */
-void GPIODeinit(void);
+
 
 /** @} */
 /** @} */
