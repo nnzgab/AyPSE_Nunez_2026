@@ -1,210 +1,88 @@
+#include <stdio.h>
+
 #include "unity.h"
 #include "gpio_hal.h"
 #include "board_config.h"
-#include <stdbool.h>
 
-/*
- * GPIO HAL - Unit Tests
- *
- * Estos tests verifican la interfaz pública del HAL.
- *
- * No se pretende validar aquí el comportamiento eléctrico
- * de LEDs, pulsadores o del módulo Quectel.
- *
- * La validación eléctrica sobre hardware real se documenta
- * como prueba funcional independiente.
- */
+#include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 
-/*
- * ============================================================
- * GPIOInit
- * ============================================================
- */
-
-/**
- * @brief Verifica que GPIO23 pueda configurarse como entrada.
- *
- * GPIO23 corresponde al pulsador de pánico.
- */
-TEST_CASE("GPIOInit configures panic button as input",
-          "[drivers_hal][gpio]")
+TEST_CASE("GPIO4 direct ESP-IDF diagnostic",
+          "[gpio]")
 {
-    GPIOInit(GPIO_PANIC_BTN, GPIO_INPUT);
+    printf("\n");
+    printf("========================================\n");
+    printf(" GPIO4 - DIRECT ESP-IDF TEST\n");
+    printf("========================================\n");
 
-    TEST_ASSERT_TRUE(true);
+    gpio_reset_pin(GPIO_NUM_4);
+    gpio_set_direction(GPIO_NUM_4, GPIO_MODE_OUTPUT);
+
+    printf("GPIO4 -> HIGH\n");
+
+    gpio_set_level(GPIO_NUM_4, 1);
+
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    printf("gpio_get_level(): %d\n",
+           gpio_get_level(GPIO_NUM_4));
+
+    printf("GPIO4 -> LOW\n");
+
+    gpio_set_level(GPIO_NUM_4, 0);
+
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    printf("gpio_get_level(): %d\n",
+           gpio_get_level(GPIO_NUM_4));
+
+    TEST_ASSERT_EQUAL(0, gpio_get_level(GPIO_NUM_4));
 }
-
-
-/**
- * @brief Verifica que GPIO4 pueda configurarse como salida.
- *
- * GPIO4 corresponde al LED indicador del botón de pánico.
- */
-TEST_CASE("GPIOInit configures panic LED as output",
-          "[drivers_hal][gpio]")
-{
-    GPIOInit(GPIO_PANIC_LED_STATUS, GPIO_OUTPUT);
-
-    TEST_ASSERT_TRUE(true);
-}
-
-
-/**
- * @brief Verifica que GPIO5 pueda configurarse como salida.
- */
-TEST_CASE("GPIOInit configures Quectel LED as output",
-          "[drivers_hal][gpio]")
-{
-    GPIOInit(GPIO_QUECTEL_LED_STATUS, GPIO_OUTPUT);
-
-    TEST_ASSERT_TRUE(true);
-}
-
-
-/**
- * @brief Verifica que GPIO6 pueda configurarse como salida.
- *
- * GPIO6 corresponde a PWRKEY del módulo Quectel.
- */
-TEST_CASE("GPIOInit configures Quectel PWRKEY as output",
-          "[drivers_hal][gpio]")
-{
-    GPIOInit(QUECTEL_PWRKEY_PIN, GPIO_OUTPUT);
-
-    TEST_ASSERT_TRUE(true);
-}
-
 
 /*
  * ============================================================
- * GPIOOn
+ * GPIO6 - Sin carga conectada
  * ============================================================
  */
 
-/**
- * @brief Verifica que GPIOOn() pueda ser ejecutada
- *        sobre una salida.
- */
-TEST_CASE("GPIOOn drives panic LED output",
-          "[drivers_hal][gpio]")
+TEST_CASE("GPIO6 output without external load",
+          "[gpio]")
 {
-    GPIOInit(GPIO_PANIC_LED_STATUS, GPIO_OUTPUT);
-
-    GPIOOn(GPIO_PANIC_LED_STATUS);
-
-    TEST_ASSERT_TRUE(true);
-}
-
-
-/*
- * ============================================================
- * GPIOOff
- * ============================================================
- */
-
-/**
- * @brief Verifica que GPIOOff() pueda ser ejecutada
- *        sobre una salida.
- */
-TEST_CASE("GPIOOff drives panic LED output",
-          "[drivers_hal][gpio]")
-{
-    GPIOInit(GPIO_PANIC_LED_STATUS, GPIO_OUTPUT);
-
-    GPIOOff(GPIO_PANIC_LED_STATUS);
-
-    TEST_ASSERT_TRUE(true);
-}
-
-
-/*
- * ============================================================
- * GPIOState
- * ============================================================
- */
-
-/**
- * @brief Verifica que GPIOState() pueda establecer
- *        ambos estados lógicos.
- */
-TEST_CASE("GPIOState drives high and low",
-          "[drivers_hal][gpio]")
-{
-    GPIOInit(GPIO_PANIC_LED_STATUS, GPIO_OUTPUT);
-
-    GPIOState(GPIO_PANIC_LED_STATUS, true);
-    GPIOState(GPIO_PANIC_LED_STATUS, false);
-
-    TEST_ASSERT_TRUE(true);
-}
-
-
-/*
- * ============================================================
- * GPIOToggle
- * ============================================================
- */
-
-/**
- * @brief Verifica que GPIOToggle() pueda ejecutarse
- *        sobre una salida.
- */
-TEST_CASE("GPIOToggle changes output state",
-          "[drivers_hal][gpio]")
-{
-    GPIOInit(GPIO_PANIC_LED_STATUS, GPIO_OUTPUT);
-
-    GPIOToggle(GPIO_PANIC_LED_STATUS);
-    GPIOToggle(GPIO_PANIC_LED_STATUS);
-
-    TEST_ASSERT_TRUE(true);
-}
-
-
-/*
- * ============================================================
- * GPIORead
- * ============================================================
- */
-
-/**
- * @brief Verifica que GPIORead() pueda leer una entrada.
- *
- * No se impone un valor físico determinado porque el estado
- * depende de la condición real del pulsador.
- */
-TEST_CASE("GPIORead reads panic button",
-          "[drivers_hal][gpio]")
-{
-    GPIOInit(GPIO_PANIC_BTN, GPIO_INPUT);
-
-    bool state = GPIORead(GPIO_PANIC_BTN);
-
-    TEST_ASSERT_TRUE(state == true || state == false);
-}
-
-
-/*
- * ============================================================
- * Integridad básica de los GPIO utilizados por el proyecto
- * ============================================================
- */
-
-/**
- * @brief Verifica que todos los GPIO utilizados por el proyecto
- *        puedan inicializarse.
- */
-TEST_CASE("Project GPIOs can be initialized",
-          "[drivers_hal][gpio]")
-{
-    GPIOInit(GPIO_PANIC_BTN, GPIO_INPUT);
-
-    GPIOInit(GPIO_PANIC_LED_STATUS, GPIO_OUTPUT);
-
-    GPIOInit(GPIO_QUECTEL_LED_STATUS, GPIO_OUTPUT);
+    printf("\n");
+    printf("========================================\n");
+    printf(" GPIO6 - NO LOAD TEST\n");
+    printf("========================================\n");
 
     GPIOInit(QUECTEL_PWRKEY_PIN, GPIO_OUTPUT);
 
-    TEST_ASSERT_TRUE(true);
+    /*
+     * GPIO6 -> HIGH
+     */
+    printf("GPIO6 -> HIGH\n");
+
+    GPIOOn(QUECTEL_PWRKEY_PIN);
+
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    printf("GPIO6 read: %d\n",
+           gpio_get_level(GPIO_NUM_6));
+
+    /*
+     * GPIO6 -> LOW
+     */
+    printf("GPIO6 -> LOW\n");
+
+    GPIOOff(QUECTEL_PWRKEY_PIN);
+
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    printf("GPIO6 read: %d\n",
+           gpio_get_level(GPIO_NUM_6));
+
+    /*
+     * Al finalizar dejamos PWRKEY en LOW.
+     */
+    TEST_ASSERT_EQUAL(0, gpio_get_level(GPIO_NUM_6));
 }

@@ -13,6 +13,8 @@
 #include "gpio_hal.h"
 #include <stdint.h>
 #include "driver/gpio.h"
+#include "esp_err.h" /* opcional, para códigos de error */
+
 /*==================[macros and definitions]=================================*/
 #define GPIO_QTY 	24
 
@@ -119,6 +121,40 @@ void GPIOActivInt(gpio_t pin, void *ptr_int_func, bool edge, void *args){
 		isr_service_installed = true;
 	}
     gpio_isr_handler_add(gpio_list[pin].pin, ptr_int_func, (void *)args);	
+}
+
+/* Desactiva la interrupción y remueve el handler */
+void GPIODeactivInt(gpio_t pin){
+    if(!GPIOIsValid(pin)){
+        return;
+    }
+    /* Deshabilitar la interrupción en el pin */
+    gpio_intr_disable(gpio_list[pin].pin);
+    /* Remover el handler asociado */
+    gpio_isr_handler_remove(gpio_list[pin].pin);
+}
+
+/* Solo deshabilita la interrupción sin remover el handler */
+void GPIOIntrDisable(gpio_t pin){
+    if(!GPIOIsValid(pin)){
+        return;
+    }
+    gpio_intr_disable(gpio_list[pin].pin);
+}
+
+/* Habilita la interrupción (si el tipo de intr ya fue configurado) */
+void GPIOIntrEnable(gpio_t pin){
+    if(!GPIOIsValid(pin)){
+        return;
+    }
+    gpio_intr_enable(gpio_list[pin].pin);
+}
+
+/* Desinstala el servicio ISR global. Usar con cuidado: afecta a todos los handlers */
+void GPIOUninstallISRService(void){
+    /* Esta función desinstala el servicio ISR global del ESP-IDF.
+       Solo llamarla si estás seguro de que no quedan handlers activos. */
+    gpio_uninstall_isr_service();
 }
 
 

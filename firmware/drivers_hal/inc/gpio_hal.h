@@ -136,6 +136,32 @@ bool GPIORead(gpio_t pin);
 void GPIOActivInt(gpio_t pin, void *ptr_int_func, bool edge, void *args);
 
 
+/**
+ * @brief Desactiva la interrupción de un GPIO y remueve su handler
+ *
+ * @param pin GPIO number
+ */
+void GPIODeactivInt(gpio_t pin);
+
+/**
+ * @brief Habilita la interrupción de un GPIO previamente configurada
+ *
+ * @param pin GPIO number
+ */
+void GPIOIntrEnable(gpio_t pin);
+
+/**
+ * @brief Deshabilita la interrupción de un GPIO sin remover el handler
+ *
+ * @param pin GPIO number
+ */
+void GPIOIntrDisable(gpio_t pin);
+
+/**
+ * @brief Desinstala el servicio ISR global (usar con cuidado)
+ *
+ */
+void GPIOUninstallISRService(void);
 
 /** @} */
 /** @} */
