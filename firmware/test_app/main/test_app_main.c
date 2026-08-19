@@ -34,4 +34,6 @@ void app_main(void)
     printf("Enter a tag to filter tests\n\n");
 
     unity_run_menu();
+
 }
+    
