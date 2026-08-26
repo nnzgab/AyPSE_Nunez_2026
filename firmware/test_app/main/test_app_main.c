@@ -30,19 +30,13 @@ void app_main(void)
     //unity_run_tests_by_tag("[powerkey]", false);
 
 
-    /* Agregas esta línea para ejecutar los de cellular AT automáticamente */
-    //unity_run_tests_by_tag("[cellular]", false);
-
+ 
     /* Agregas esta línea para ejecutar init cellular automáticamente */
-    //unity_run_tests_by_tag("[poweroff]", false);
+    //unity_run_tests_by_tag("[ready]", false);
 
-    /* Agregas esta línea para ejecutar init cellular automáticamente */
-    //unity_run_tests_by_tag("[init]", false);
-
-    /* Agregas esta línea para ejecutar init cellular automáticamente */
-    unity_run_tests_by_tag("[power_on]", false);
-
-    
+      /* Agregas esta línea para ejecutar init cellular automáticamente */
+    unity_run_tests_by_tag("[at]", false);
+  
 
 
     UNITY_END();
