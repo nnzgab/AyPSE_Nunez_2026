@@ -24,29 +24,22 @@
 
 
 
-bool CellularPowerOn(void)
+bool CellularPowerOn(void)//*********************** */
 {
     GPIOInit(QUECTEL_PWRKEY_PIN, GPIO_OUTPUT);
-
     GPIOOff(QUECTEL_PWRKEY_PIN);
-
     vTaskDelay(pdMS_TO_TICKS(CELLULAR_PWRKEY_ON_TIME_MS));
-
     GPIOOn(QUECTEL_PWRKEY_PIN);
-
     return true;
 }
 
 
-bool CellularWaitReady(uint32_t timeout_ms)
+
+bool CellularWaitReady(uint32_t timeout_ms)/************* */
 {
     char response[256];
 
-    int len = UartHalReadBytes(
-        response,
-        sizeof(response) - 1,
-        timeout_ms
-    );
+    int len = UartHalReadBytes(response, sizeof(response) - 1, timeout_ms);
 
     if (len <= 0) {
         return false;
@@ -64,17 +57,17 @@ bool CellularIsReady(void)
 {
     const char *command = "AT\r\n";
 
-    UartHalWriteBytes(
-        command,
-        strlen(command)
-    );
+    int written = UartHalWriteBytes(command, strlen(command));
+    if (written <= 0) {
+        printf("CELLULAR AT TX failed\n");
+        return false;
+    }
 
     char response[256];
-
     int len = UartHalReadBytes(
         response,
         sizeof(response) - 1,
-        1000
+        CELLULAR_AT_TIMEOUT_MS
     );
 
     if (len <= 0) {
@@ -82,13 +75,76 @@ bool CellularIsReady(void)
     }
 
     response[len] = '\0';
-
     printf("CELLULAR AT RX: %s\n", response);
 
     return strstr(response, "OK") != NULL;
 }
 
 
+/* ============================================================
+ * Envío de comandos AT
+ * ============================================================ */
+
+ bool CellularSendCommand( const char *command, char *response, size_t response_size, uint32_t timeout_ms);
+
+bool CellularSendCommand(
+    const char *command,
+    char *response,
+    size_t response_size,
+    uint32_t timeout_ms
+)
+{
+    if (command == NULL ||
+        response == NULL ||
+        response_size == 0)
+    {
+        return false;
+    }
+
+    /*
+     * Limpiamos el buffer antes de utilizarlo.
+     */
+    response[0] = '\0';
+
+    /*
+     * Enviamos el comando al EG915U.
+     */
+    int written = UartHalWriteBytes(command, strlen(command));
+
+    if (written <= 0)
+    {
+        printf("CELLULAR TX failed: %s", command);
+        return false;
+    }
+
+    printf("CELLULAR TX: %s", command);
+
+    /*
+     * Esperamos la respuesta.
+     */
+    int len = UartHalReadBytes(
+        response,
+        response_size - 1,
+        timeout_ms
+    );
+
+    if (len <= 0)
+    {
+        printf("CELLULAR RX timeout\n");
+        return false;
+    }
+
+    /*
+     * Terminamos la cadena.
+     */
+    response[len] = '\0';
+
+    printf("CELLULAR RX: %s\n", response);
+
+    return true;
+}
+
+/////////////////////////////////////
 bool CellularInit(void)
 {
     printf("\n");
