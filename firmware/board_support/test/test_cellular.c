@@ -73,3 +73,30 @@ TEST_CASE("TEST-BSP-CELLULAR-07 Echo off", "[bsp][cellular][echo]")
         printf("Echo desactivado correctamente.\n");
     }
 }
+
+TEST_CASE("TEST-BSP-CELLULAR-07 Echo off", "[bsp][cellular][full]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+
+    bool full_on = CellularSetFullFunction();
+    TEST_ASSERT_TRUE_MESSAGE( full_on, "El módulo no respondió OK al comando full");
+
+    if (full_on) {
+        printf("full activado correctamente.\n");
+    }
+}
+
+TEST_CASE("TEST-BSP-CELLULAR-09 IMSI read", "[bsp][cellular][imsi]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+    char imsi[32];
+    bool ok = CellularGetIMSI(imsi, sizeof(imsi));
+
+    TEST_ASSERT_TRUE_MESSAGE(ok, "No se pudo obtener IMSI");
+
+    if (ok) {
+        printf("IMSI leído: %s\n", imsi);
+    }
+}

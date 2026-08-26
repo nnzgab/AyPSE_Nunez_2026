@@ -38,8 +38,13 @@ void app_main(void)
     //unity_run_tests_by_tag("[at]", false);
 
           /* Agregas esta línea para ejecutar init cellular automáticamente */
-    unity_run_tests_by_tag("[echo]", false);
+    //unity_run_tests_by_tag("[echo]", false);
+
+              /* Agregas esta línea para ejecutar init cellular automáticamente */
+    //unity_run_tests_by_tag("[full]", false);
   
+              /* Agregas esta línea para ejecutar init cellular automáticamente */
+    unity_run_tests_by_tag("[imsi]", false);
   
 
 

@@ -19,7 +19,10 @@
 
 #define CELLULAR_AT_TIMEOUT_MS           1000
 #define CELLULAR_POWEROFF_TIMEOUT_MS     5000
+#define CELLULAR_CFUN_TIMEOUT_MS    10000
 
+#define CELLULAR_NETWORK_POLL_MS       1000
+#define CELLULAR_NETWORK_TIMEOUT_MS    120000
 
 
 
@@ -162,6 +165,92 @@ bool CellularEchoOff(void)
     return strstr(response, "OK") != NULL;
 }
 
+bool CellularSetFullFunction(void)
+{
+    char response[128];
+
+    if (!CellularSendCommand(
+            "AT+CFUN=1\r\n",
+            response,
+            sizeof(response),
+            CELLULAR_CFUN_TIMEOUT_MS))
+    {
+        return false;
+    }
+
+    return strstr(response, "OK") != NULL;
+}
+
+
+bool CellularGetIMSI(char *imsi, size_t imsi_size)
+{
+    char response[128];
+
+    if (imsi == NULL || imsi_size == 0)
+    {
+        return false;
+    }
+
+    if (!CellularSendCommand(
+            "AT+CIMI\r\n",
+            response,
+            sizeof(response),
+            CELLULAR_AT_TIMEOUT_MS))
+    {
+        return false;
+    }
+
+    /*
+     * Buscamos el IMSI dentro de la respuesta.
+     */
+    char *start = response;
+
+    while (*start == '\r' || *start == '\n')
+    {
+        start++;
+    }
+
+    /*
+     * Copiamos hasta CR/LF.
+     */
+    size_t i = 0;
+
+    while (start[i] != '\0' &&
+           start[i] != '\r' &&
+           start[i] != '\n' &&
+           i < imsi_size - 1)
+    {
+        imsi[i] = start[i];
+        i++;
+    }
+
+    imsi[i] = '\0';
+
+    /*
+     * Un IMSI normalmente tiene 15 dígitos.
+     */
+    if (i != 15)
+    {
+        printf("CELLULAR: Invalid IMSI length: %d\n", (int)i);
+        return false;
+    }
+
+    /*
+     * Verificamos que todos sean dígitos.
+     */
+    for (i = 0; i < 15; i++)
+    {
+        if (imsi[i] < '0' || imsi[i] > '9')
+        {
+            printf("CELLULAR: Invalid IMSI\n");
+            return false;
+        }
+    }
+
+    printf("CELLULAR IMSI: %s\n", imsi);
+
+    return true;
+}
 /////////////////////////////////////
 bool CellularInit(void)
 {

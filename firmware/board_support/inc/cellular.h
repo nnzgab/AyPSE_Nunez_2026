@@ -21,6 +21,9 @@ bool CellularWaitReady(uint32_t timeout_ms);
 
 
 bool CellularEchoOff(void);
+bool CellularSetFullFunction(void);
+bool CellularGetIMSI(char *imsi, size_t imsi_size);
+
 
 
 bool CellularIsReady(void);
