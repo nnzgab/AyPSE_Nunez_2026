@@ -12,16 +12,16 @@
 /*==================[inclusions]=============================================*/
 #include "gpio_hal.h"
 #include <stdint.h>
+#include <stdbool.h>
+
 #include "driver/gpio.h"
-#include "esp_err.h" /* opcional, para códigos de error */
+#include "esp_err.h"
+
+
+
 
 /*==================[macros and definitions]=================================*/
 #define GPIO_QTY 	24
-
-static bool GPIOIsValid(gpio_t pin)
-{
-    return (pin < GPIO_QTY) && (pin != GPIO_14);
-}
 
 typedef struct{
 	uint64_t pin;				/*!< GPIO pin */
@@ -29,7 +29,12 @@ typedef struct{
 	gpio_pull_mode_t pull;		/*!< GPIO pull-up/pull-down resistor */
 	bool state;					/*!< GPIO output state */
 } digital_io_t;
+
+
 /*==================[internal data declaration]==============================*/
+
+static bool gpio_isr_service_installed = false;
+
 
 /*==================[internal functions declaration]=========================*/
 
@@ -65,17 +70,17 @@ digital_io_t gpio_list[GPIO_QTY] = {
 /*==================[internal functions definition]==========================*/
 
 /*==================[external functions definition]==========================*/
+
 void GPIOInit(gpio_t pin, io_t io){
-	if(!GPIOIsValid(pin)){
-        return;
-    }
+	if((pin == GPIO_14) || (pin > GPIO_23)){
+		return;
+	}
 	if(io == GPIO_INPUT){
 		gpio_list[pin].mode = GPIO_MODE_INPUT;
 	} else if(io == GPIO_OUTPUT){
-		gpio_list[pin].mode = GPIO_MODE_OUTPUT;
-	}
-	else{
-		return;
+		//gpio_list[pin].mode = GPIO_MODE_OUTPUT;
+		gpio_list[pin].mode = GPIO_MODE_INPUT_OUTPUT;
+
 	}
 	gpio_reset_pin(gpio_list[pin].pin);
 	gpio_set_direction(gpio_list[pin].pin, gpio_list[pin].mode);
@@ -83,9 +88,6 @@ void GPIOInit(gpio_t pin, io_t io){
 }
 
 void GPIOOn(gpio_t pin){
-	if(!GPIOIsValid(pin)){
-        return;
-    }
 	gpio_list[pin].state = true;
 	gpio_set_level(gpio_list[pin].pin, gpio_list[pin].state);
 }
@@ -109,54 +111,110 @@ bool GPIORead(gpio_t pin){
 	return gpio_get_level(gpio_list[pin].pin);
 }
 
-void GPIOActivInt(gpio_t pin, void *ptr_int_func, bool edge, void *args){
-	static bool isr_service_installed = false;
-	if(edge){
-		gpio_set_intr_type(gpio_list[pin].pin, GPIO_INTR_POSEDGE);
-	} else{
-		gpio_set_intr_type(gpio_list[pin].pin, GPIO_INTR_NEGEDGE);
-	}
-	if(!isr_service_installed){	
-		gpio_install_isr_service(0);
-		isr_service_installed = true;
-	}
-    gpio_isr_handler_add(gpio_list[pin].pin, ptr_int_func, (void *)args);	
-}
 
-/* Desactiva la interrupción y remueve el handler */
-void GPIODeactivInt(gpio_t pin){
-    if(!GPIOIsValid(pin)){
+
+void GPIOActivInt(
+    gpio_t pin,
+    gpio_int_mode_t mode,
+	gpio_callback_t callback,
+	void *args
+)
+{
+	if (pin >= GPIO_QTY)
+    {
         return;
     }
-    /* Deshabilitar la interrupción en el pin */
-    gpio_intr_disable(gpio_list[pin].pin);
-    /* Remover el handler asociado */
-    gpio_isr_handler_remove(gpio_list[pin].pin);
-}
 
-/* Solo deshabilita la interrupción sin remover el handler */
-void GPIOIntrDisable(gpio_t pin){
-    if(!GPIOIsValid(pin)){
+    if (callback == NULL)
+    {
         return;
     }
-    gpio_intr_disable(gpio_list[pin].pin);
+
+	if (!gpio_isr_service_installed)
+    {
+        esp_err_t err;
+
+        err = gpio_install_isr_service(0);
+
+        if ((err != ESP_OK) &&
+            (err != ESP_ERR_INVALID_STATE))
+        {
+            return;
+        }
+
+        gpio_isr_service_installed = true;
+    }
+
+	/*
+     * Configuración del tipo de interrupción.
+     *
+     * La traducción se realiza aquí para mantener
+     * GPIO_INTR_* fuera de las capas superiores.
+     */
+    gpio_int_type_t intr_type;
+
+    switch (mode)
+    {
+        case GPIO_INT_RISING:
+            intr_type = GPIO_INTR_POSEDGE;
+            break;
+
+        case GPIO_INT_FALLING:
+            intr_type = GPIO_INTR_NEGEDGE;
+            break;
+
+        case GPIO_INT_BOTH:
+            intr_type = GPIO_INTR_ANYEDGE;
+            break;
+
+        case GPIO_INT_DISABLE:
+            intr_type = GPIO_INTR_DISABLE;
+            break;
+
+        default:
+            return;
+    }
+
+	/*
+     * Configuramos el tipo de interrupción del GPIO.
+     */
+    gpio_set_intr_type(
+        gpio_list[pin].pin,
+        intr_type
+    );
+
+	/*
+     * Registramos el callback asociado al GPIO.
+     */
+    gpio_isr_handler_add(
+        gpio_list[pin].pin,
+        callback,
+        args
+    );
 }
 
-/* Habilita la interrupción (si el tipo de intr ya fue configurado) */
-void GPIOIntrEnable(gpio_t pin){
-    if(!GPIOIsValid(pin)){
+
+
+void GPIODeactivInt(gpio_t pin)
+{
+    if (pin >= GPIO_QTY)
+    {
         return;
     }
-    gpio_intr_enable(gpio_list[pin].pin);
+
+    /*
+     * Eliminamos el callback asociado al GPIO.
+     */
+    gpio_isr_handler_remove(
+        gpio_list[pin].pin
+    );
+
+    /*
+     * Desactivamos la interrupción del GPIO.
+     */
+    gpio_intr_disable(
+        gpio_list[pin].pin
+    );
 }
-
-/* Desinstala el servicio ISR global. Usar con cuidado: afecta a todos los handlers */
-void GPIOUninstallISRService(void){
-    /* Esta función desinstala el servicio ISR global del ESP-IDF.
-       Solo llamarla si estás seguro de que no quedan handlers activos. */
-    gpio_uninstall_isr_service();
-}
-
-
 
 /*==================[end of file]============================================*/

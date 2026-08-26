@@ -5,24 +5,55 @@
 #include <stdint.h>
 #include <stddef.h>
 
-/* Servicios de Control y Red definidos para el módulo celular[cite: 2] */
+
+/*==================[external functions declaration]=========================*/
+
+/* Inicialización y estado */
+/* Servicios de Control y Red definidos para el módulo celular*/
+
 bool CellularInit(void);
+bool cellularPowerOn(void);
 bool CellularReset(void);
+
+bool CellularPowerOn(void);
+
+bool CellularWaitReady(uint32_t timeout_ms);
+
+
+
+
+
 bool CellularIsReady(void);
+
+
+bool CellularPowerOff(void);
+bool CellularPowerOffHard(void);
+
+
+/* Conexión de red */
+
 bool CellularConnect(void);
+
 bool CellularDisconnect(void);
+
+
+/* PDP */
+
 bool CellularPdpConfigure(const char *apn);
+
 bool CellularPdpActivate(void);
 
-/* Consultas requeridas por el Middleware (IMEI y NTP)[cite: 1] */
+/* Consultas requeridas por el Middleware (IMEI y NTP) */
 bool CellularGetImei(char *imei_out, size_t max_len);
 bool CellularGetNtpTime(char *timestamp_out, size_t max_len);
 
-/* Manejo de Sockets TCP y SMS[cite: 2] */
+/* Manejo de Sockets TCP y SMS */
 bool CellularTcpConnect(const char *host, uint16_t port);
 bool CellularTcpSend(const uint8_t *buffer, size_t length);
 int CellularTcpReceive(uint8_t *buffer, size_t length, uint32_t timeout_ms);
 bool CellularTcpDisconnect(void);
+
+/* SMS */
 bool CellularSmsSend(const char *number, const char *message);
 
 #endif /* CELLULAR_H */

@@ -1,6 +1,10 @@
 #include "led.h"
+
 #include "gpio_hal.h"
 #include "board_config.h"
+
+
+/*==================[external functions definition]==========================*/
 
 bool LedInit(void) {
     GPIOInit(GPIO_PANIC_LED_STATUS, GPIO_OUTPUT);
@@ -8,6 +12,7 @@ bool LedInit(void) {
     
     GPIOOff(GPIO_PANIC_LED_STATUS);
     GPIOOff(GPIO_QUECTEL_LED_STATUS);
+
     return true;
 }
 
@@ -42,3 +47,5 @@ void LedState(led_id_t id, bool state) {
         GPIOState(GPIO_QUECTEL_LED_STATUS, state);
     }
 }
+
+/*==================[end of file]============================================*/

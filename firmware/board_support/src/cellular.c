@@ -9,45 +9,145 @@
 #include <string.h>
 #include <stdio.h>
 
+/* ============================================================
+ * Configuración interna
+ * ============================================================ */
 
-#include "esp_log.h"              // <-- AGREGAR ESTA LÍNEA quitar esto
-static const char *TAG = "CELLULAR_BSP"; // <-- AGREGAR ESTA LÍNEA quitar esto
+#define CELLULAR_PWRKEY_ON_TIME_MS       100
+#define CELLULAR_PWRKEY_OFF_TIME_MS      2000
+#define CELLULAR_BOOT_WAIT_MS            5000
 
-bool CellularInit(void) {
-    // 1. Inicializar la UART para los comandos AT
-    UartHalInit(UART_BAUDRATE);
+#define CELLULAR_AT_TIMEOUT_MS           1000
+#define CELLULAR_POWEROFF_TIMEOUT_MS     5000
 
-    // 2. Configurar el pin PWRKEY como salida digital
+
+
+
+
+bool CellularPowerOn(void)
+{
     GPIOInit(QUECTEL_PWRKEY_PIN, GPIO_OUTPUT);
 
-    // 3. Secuencia típica de encendido para el Quectel (pulso en PWRKEY)
-    // Dependiendo del hardware, se suele llevar a bajo unos milisegundos y liberar, 
-    // o viceversa, para forzar el encendido del módulo.
     GPIOOff(QUECTEL_PWRKEY_PIN);
-    vTaskDelay(pdMS_TO_TICKS(100)); // Mantener presionado/bajo
-    GPIOOn(QUECTEL_PWRKEY_PIN);     // Liberar
-    vTaskDelay(pdMS_TO_TICKS(2000)); // Esperar a que el módem arranque y estabilice su UART
+
+    vTaskDelay(pdMS_TO_TICKS(CELLULAR_PWRKEY_ON_TIME_MS));
+
+    GPIOOn(QUECTEL_PWRKEY_PIN);
 
     return true;
 }
+
+
+bool CellularWaitReady(uint32_t timeout_ms)
+{
+    char response[256];
+
+    int len = UartHalReadBytes(
+        response,
+        sizeof(response) - 1,
+        timeout_ms
+    );
+
+    if (len <= 0) {
+        return false;
+    }
+
+    response[len] = '\0';
+
+    printf("CELLULAR RX: %s\n", response);
+
+    return strstr(response, "RDY") != NULL;
+}
+
+
+bool CellularIsReady(void)
+{
+    const char *command = "AT\r\n";
+
+    UartHalWriteBytes(
+        command,
+        strlen(command)
+    );
+
+    char response[256];
+
+    int len = UartHalReadBytes(
+        response,
+        sizeof(response) - 1,
+        1000
+    );
+
+    if (len <= 0) {
+        return false;
+    }
+
+    response[len] = '\0';
+
+    printf("CELLULAR AT RX: %s\n", response);
+
+    return strstr(response, "OK") != NULL;
+}
+
+
+bool CellularInit(void)
+{
+    printf("\n");
+    printf("========================================\n");
+    printf(" CELLULAR INIT\n");
+    printf("========================================\n");
+
+    if (!CellularPowerOn()) {
+        printf("CELLULAR: Power ON fallo\n");
+        return false;
+    }
+
+    if (!CellularWaitReady(12000)) {
+        printf("CELLULAR: no se recibio RDY\n");
+        return false;
+    }
+
+    if (!CellularIsReady()) {
+        printf("CELLULAR: AT no respondio OK\n");
+        return false;
+    }
+
+    printf("CELLULAR: EG915U listo\n");
+
+    return true;
+}
+
+
+
 
 bool CellularReset(void) {
     UartHalWriteBytes("AT+CFUN=1,1\r\n", 13);
     return true;
 }
 
-bool CellularIsReady(void) {
+
+// Apagado lógico recomendado
+bool CellularPowerOff(void) {
+    UartHalWriteBytes("AT+QPOWD=1\r\n", strlen("AT+QPOWD=1\r\n"));
     char response[64];
-    UartHalWriteBytes("AT\r\n", 4);
-    int len = UartHalReadBytes(response, sizeof(response) - 1, 1000);
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 5000);
     if (len > 0) {
         response[len] = '\0';
-        if (strstr(response, "OK") != NULL) {
-            return true;
-        }
+        return strstr(response, "POWER DOWN") != NULL;
     }
     return false;
 }
+
+// Apagado físico (hard) - solo emergencia
+bool CellularPowerOffHard(void) {
+    GPIOInit(QUECTEL_PWRKEY_PIN, GPIO_OUTPUT);
+    GPIOOff(QUECTEL_PWRKEY_PIN);
+    vTaskDelay(pdMS_TO_TICKS(2000)); // mantener bajo ~2s
+    GPIOOn(QUECTEL_PWRKEY_PIN);
+    vTaskDelay(pdMS_TO_TICKS(5000)); // esperar apagado
+    return true;
+}
+
+
 
 bool CellularConnect(void) {
     char response[64];
@@ -60,26 +160,28 @@ bool CellularDisconnect(void) {
     return true;
 }
 
+
+/*
 bool CellularPdpConfigure(const char *apn) {
     char cmd[64];
     snprintf(cmd, sizeof(cmd), "AT+QICSGP=1,1,\"%s\",,,1\r\n", apn);
-    /* 1. Transmitir por TX (GPIO 18) */
+    // 1. Transmitir por TX (GPIO 18) 
     UartHalWriteBytes(cmd, strlen(cmd));
 
     char response[64];
-    /* 2. Intentar leer por RX (GPIO 19) */
+    // 2. Intentar leer por RX (GPIO 19) 
     int len = UartHalReadBytes(response, sizeof(response) - 1, 2000);
 
     /////////////////////////////////////////////////
 
-    /* --- AGREGAR DESDE AQUÍ --- */
+    
     if (len > 0) {
-        response[len] = '\0'; /* Asegurar fin de cadena */
-        ESP_LOGI(TAG, ">>> ECO DETECTADO EN RX (%d bytes): %s", len, response);
+        response[len] = '\0'; // Asegurar fin de cadena 
+    //    ESP_LOGI(TAG, ">>> ECO DETECTADO EN RX (%d bytes): %s", len, response);
     } else {
-        ESP_LOGE(TAG, ">>> NO SE RECIBIÓ NADA EN RX (Timeout/Circuito abierto)");
+    //    ESP_LOGE(TAG, ">>> NO SE RECIBIÓ NADA EN RX (Timeout/Circuito abierto)");
     }
-    /* --- HASTA AQUÍ --- */
+    
     /////////////////////////////////////////////////
 
 
@@ -87,6 +189,8 @@ bool CellularPdpConfigure(const char *apn) {
     return (len > 0 && strstr(response, "OK") != NULL);
 }
 
+*/
+/*
 bool CellularPdpActivate(void) {
     UartHalWriteBytes("AT+QIACT=1\r\n", 12);
     char response[64];
@@ -162,3 +266,4 @@ bool CellularSmsSend(const char *number, const char *message) {
     int len = UartHalReadBytes(response, sizeof(response) - 1, 10000);
     return (len > 0 && strstr(response, "+CMGS:") != NULL);
 }
+*/

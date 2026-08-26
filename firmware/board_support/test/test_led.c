@@ -1,46 +1,67 @@
-#if 0
-// todo el contenido del archivo
-
-
 #include "unity.h"
+
 #include "led.h"
+#include "board_config.h"
 
-TEST_CASE("LedsInit returns success", "[board_support][led]")
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+
+#define DELAY_TIME_MS    100
+
+
+TEST_CASE("TEST-BSP-LED-01 LedInit initializes LEDs", "[bsp][led]")
 {
-    TEST_ASSERT_TRUE(LedsInit());
-}
-
-TEST_CASE("LedOn and LedOff return success for valid LEDs", "[board_support][led]")
-{
-    TEST_ASSERT_TRUE(LedOn(LED_1));
-    TEST_ASSERT_TRUE(LedOn(LED_2));
-    TEST_ASSERT_TRUE(LedOn(LED_3));
-
-    TEST_ASSERT_TRUE(LedOff(LED_1));
-    TEST_ASSERT_TRUE(LedOff(LED_2));
-    TEST_ASSERT_TRUE(LedOff(LED_3));
-}
-
-TEST_CASE("LedToggle returns success for valid LEDs", "[board_support][led]")
-{
-    TEST_ASSERT_TRUE(LedToggle(LED_1));
-    TEST_ASSERT_TRUE(LedToggle(LED_2));
-    TEST_ASSERT_TRUE(LedToggle(LED_3));
-}
-
-TEST_CASE("LedsOffAll and LedsMask return success", "[board_support][led]")
-{
-    TEST_ASSERT_TRUE(LedsOffAll());
-    TEST_ASSERT_TRUE(LedsMask(LED_1 | LED_3));
-    TEST_ASSERT_TRUE(LedsMask(0));
-}
-
-TEST_CASE("Invalid LED values return failure", "[board_support][led]")
-{
-    TEST_ASSERT_FALSE(LedOn((led_t)0));
-    TEST_ASSERT_FALSE(LedOff((led_t)0));
-    TEST_ASSERT_FALSE(LedToggle((led_t)0));
+    bool result;
+    result = LedInit();
+    TEST_ASSERT_TRUE_MESSAGE(result, "LedInit() fallo");
+    vTaskDelay(pdMS_TO_TICKS(DELAY_TIME_MS));
 }
 
 
-#endif
+TEST_CASE("TEST-BSP-LED-02 LedOn turns panic LED on", "[bsp][led][panic]")
+{
+    LedInit();
+    LedOn(LED_PANIC);
+    vTaskDelay(pdMS_TO_TICKS(DELAY_TIME_MS));
+    TEST_ASSERT_EQUAL(1, GPIORead(GPIO_PANIC_LED_STATUS));
+}
+
+
+TEST_CASE("TEST-BSP-LED-03 LedOff turns panic LED off", "[bsp][led][panic]")
+{
+    LedInit();
+    LedOff(LED_PANIC);
+    vTaskDelay(pdMS_TO_TICKS(DELAY_TIME_MS));
+    TEST_ASSERT_EQUAL(0, GPIORead(GPIO_PANIC_LED_STATUS));
+}
+
+
+TEST_CASE("TEST-BSP-LED-04 LedToggle changes panic LED state", "[bsp][led][panic]")
+{
+    LedInit();
+    LedOff(LED_PANIC);
+    vTaskDelay(pdMS_TO_TICKS(DELAY_TIME_MS));
+    TEST_ASSERT_EQUAL(0, GPIORead(GPIO_PANIC_LED_STATUS));
+
+    LedToggle(LED_PANIC);
+    vTaskDelay(pdMS_TO_TICKS(DELAY_TIME_MS));
+    TEST_ASSERT_EQUAL(1, GPIORead(GPIO_PANIC_LED_STATUS));
+
+    LedToggle(LED_PANIC);
+    vTaskDelay(pdMS_TO_TICKS(DELAY_TIME_MS));
+    TEST_ASSERT_EQUAL(0, GPIORead(GPIO_PANIC_LED_STATUS));
+}
+
+
+TEST_CASE("TEST-BSP-LED-05 LedState controls panic LED", "[bsp][led][panic]")
+{
+    LedInit();
+    LedState(LED_PANIC, true);
+    vTaskDelay(pdMS_TO_TICKS(DELAY_TIME_MS));
+    TEST_ASSERT_EQUAL(1, GPIORead(GPIO_PANIC_LED_STATUS));
+
+    LedState(LED_PANIC, false);
+    vTaskDelay(pdMS_TO_TICKS(DELAY_TIME_MS));
+    TEST_ASSERT_EQUAL(0, GPIORead(GPIO_PANIC_LED_STATUS));
+}

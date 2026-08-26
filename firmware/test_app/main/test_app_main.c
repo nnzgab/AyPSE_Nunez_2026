@@ -8,13 +8,42 @@
 void app_main(void)
 {
     printf("\n");
-    printf("========================================\n");
-    printf("       GPIO HAL UNIT TESTS\n");
+    printf("\n========================================\n");
+    printf("       EJECUCION AUTOMATICA DE TESTS\n");
     printf("========================================\n");
 
     UNITY_BEGIN();
 
-    unity_run_tests_by_tag("[gpio]", false);
+    /* Ejecuta primero todos los tests con la etiqueta [gpio] */
+    //unity_run_tests_by_tag("[gpio]", false);
+
+    /* Agregas esta línea para ejecutar los de UART automáticamente */
+    //unity_run_tests_by_tag("[uart]", false);
+
+    /* Agregas esta línea para ejecutar los de BSP led automáticamente */
+    //unity_run_tests_by_tag("[led]", false);
+
+    /* Agregas esta línea para ejecutar los de BSP led automáticamente */
+    //unity_run_tests_by_tag("[button]", false);
+
+    /* Agregas esta línea para ejecutar los de pwrky automáticamente */
+    //unity_run_tests_by_tag("[powerkey]", false);
+
+
+    /* Agregas esta línea para ejecutar los de cellular AT automáticamente */
+    //unity_run_tests_by_tag("[cellular]", false);
+
+    /* Agregas esta línea para ejecutar init cellular automáticamente */
+    //unity_run_tests_by_tag("[poweroff]", false);
+
+    /* Agregas esta línea para ejecutar init cellular automáticamente */
+    //unity_run_tests_by_tag("[init]", false);
+
+    /* Agregas esta línea para ejecutar init cellular automáticamente */
+    unity_run_tests_by_tag("[power_on]", false);
+
+    
+
 
     UNITY_END();
 
@@ -31,7 +60,7 @@ void app_main(void)
     printf("========================================\n");
 
     printf("Enter '*' to run all tests\n");
-    printf("Enter a tag to filter tests\n\n");
+    printf("Enter a tag (ej: [uart] o [gpio]) to filter tests\n\n");
 
     unity_run_menu();
 

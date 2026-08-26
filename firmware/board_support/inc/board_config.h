@@ -8,8 +8,10 @@
 /*==================[macros]=================================================*/
 
 
-/** @name Configuración UART1 (Módulo Quectel EG915U-LA)
-  * @{ */
+/** 
+  * @brief Configuración UART1 utilizada por el módulo Quectel EG915U-LA.
+  */
+ 
 #define UART1_TX_PIN        GPIO_18
 #define UART1_RX_PIN        GPIO_19
 
@@ -17,15 +19,22 @@
 #define UART_HAL_TX_PIN     UART1_TX_PIN
 #define UART_HAL_RX_PIN     UART1_RX_PIN
 #define UART_BAUDRATE       115200
-/** @} */
 
-/* Mapeo de periféricos físicos del Gateway */
+
+/**
+ * @brief Entradas y salidas utilizadas por la placa.
+ */
+
+/* Pulsador de pánico */
 #define GPIO_PANIC_BTN              GPIO_23  /* Entrada digital para botón de pánico */
+
+/* LED indicador del estado del botón de pánico */
 #define GPIO_PANIC_LED_STATUS       GPIO_4   /* LED indicador de estado para botón de pánico */
+
+/* LED indicador del estado del módulo Quectel */
 #define GPIO_QUECTEL_LED_STATUS     GPIO_5   /* LED indicador de estado de conectividad de red */
 
-
-/* Pines del módulo Quectel (ejemplo) */
+/* Pin PWRKEY del módulo Quectel */
 #define QUECTEL_PWRKEY_PIN  GPIO_6  /* salida digital para encender el modulo */
 
 /*==================[typedef]================================================*/

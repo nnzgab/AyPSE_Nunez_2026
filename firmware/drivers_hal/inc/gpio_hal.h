@@ -33,11 +33,12 @@
 /*==================[inclusions]=============================================*/
 #include <stdbool.h>
 #include <stdint.h>
+//#include "esp_err.h"
 /*==================[macros]=================================================*/
 
 /*==================[typedef]================================================*/
 /**
- * @brief GPIO direction (input or output).
+ * @brief GPIO direction (input or output). Modo de funcionamiento
  * 
  */
 typedef enum {
@@ -46,7 +47,23 @@ typedef enum {
 	} io_t;
 
 /**
- * @brief ESP32-C6 available GPIOs (not all of them are available in ESP-EDU)
+ * @brief Tipo de interrupció.
+ * 
+ */
+typedef enum
+{
+    GPIO_INT_DISABLE,
+    GPIO_INT_RISING,
+    GPIO_INT_FALLING,
+    GPIO_INT_BOTH
+} gpio_int_mode_t;
+
+/* Callback de interrupción */
+typedef void (*gpio_callback_t)(void *args);
+
+
+/**
+ * @brief ESP32-C6 available GPIOs (not all of them are available)
  * 
  */
 typedef enum gpio_list{
@@ -76,6 +93,7 @@ typedef enum gpio_list{
 	GPIO_23, 	/**< GPIO23 */
 } gpio_t;
 
+
 /*==================[internal data declaration]==============================*/
 
 /*==================[internal functions declaration]=========================*/
@@ -86,6 +104,8 @@ typedef enum gpio_list{
  * @param io GPIO direction
  */
 void GPIOInit(gpio_t pin, io_t io);
+
+/* Operaciones sobre salidas */
 
 /**
  * @brief Change GPIO state to high
@@ -116,6 +136,8 @@ void GPIOState(gpio_t pin, bool state);
  */
 void GPIOToggle(gpio_t pin);
 
+
+/* Lectura de entrada */
 /**
  * @brief Reads GPIO state
  * 
@@ -125,46 +147,36 @@ void GPIOToggle(gpio_t pin);
  */
 bool GPIORead(gpio_t pin);
 
+
 /**
- * @brief Configure GPIO input interruption
+ * @brief Configure GPIO input interruption esto rescribir
  * 
  * @param pin GPIO number
  * @param ptr_int_func Pointer to callback function
  * @param edge true: positive edge - false: negative edge
  * @param args 
  */
-void GPIOActivInt(gpio_t pin, void *ptr_int_func, bool edge, void *args);
+
+
+/* Interrupciones */
+void GPIOActivInt(
+    gpio_t pin,
+    gpio_int_mode_t mode,
+    gpio_callback_t callback,
+    void *args
+);
+
+
 
 
 /**
- * @brief Desactiva la interrupción de un GPIO y remueve su handler
+ * @brief que va aca desinstalacion?
  *
  * @param pin GPIO number
  */
+/* Desinicialización */
 void GPIODeactivInt(gpio_t pin);
 
-/**
- * @brief Habilita la interrupción de un GPIO previamente configurada
- *
- * @param pin GPIO number
- */
-void GPIOIntrEnable(gpio_t pin);
-
-/**
- * @brief Deshabilita la interrupción de un GPIO sin remover el handler
- *
- * @param pin GPIO number
- */
-void GPIOIntrDisable(gpio_t pin);
-
-/**
- * @brief Desinstala el servicio ISR global (usar con cuidado)
- *
- */
-void GPIOUninstallISRService(void);
-
-/** @} */
-/** @} */
 
 #endif /* #ifndef GPIO_HAL_H */
 

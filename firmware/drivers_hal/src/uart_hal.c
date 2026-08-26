@@ -47,6 +47,12 @@ void UartHalInitWithPins(int baud, int tx_pin, int rx_pin)
     };
 
     ESP_LOGI(UART_TAG, "InitWithPins TX=%d RX=%d baud=%d", tx_pin, rx_pin, baud);
+
+    // Si el driver ya está instalado (ej. un test anterior), lo eliminamos para reiniciar limpio.
+    if (uart_is_driver_installed(UART_HAL_NUM)) {
+        uart_driver_delete(UART_HAL_NUM);
+    }
+    
     uart_hal_configure_pins(tx_pin, rx_pin);
 
     esp_err_t err;
@@ -95,11 +101,12 @@ void UartHalWriteByte(char tx)
     (void)w;
 }
 
-void UartHalWriteBytes(const char *buf, size_t len)
+int UartHalWriteBytes(const char *buf, size_t len)
 {
-    if (buf == NULL || len == 0) return;
+    if (buf == NULL || len == 0) return 0;
     int w = uart_write_bytes(UART_HAL_NUM, buf, len);
     ESP_LOGD(UART_TAG, "uart_write_bytes returned %d for len %d", w, (int)len);
     /* esperar a que termine la transmisión para evitar truncados en pruebas */
     uart_wait_tx_done(UART_HAL_NUM, pdMS_TO_TICKS(200));
+    return w; // Devuelve la cantidad real
 }
