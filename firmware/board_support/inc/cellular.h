@@ -20,7 +20,7 @@ bool CellularPowerOn(void);
 bool CellularWaitReady(uint32_t timeout_ms);
 
 
-
+bool CellularEchoOff(void);
 
 
 bool CellularIsReady(void);

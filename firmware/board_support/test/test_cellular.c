@@ -57,3 +57,19 @@ TEST_CASE("TEST-BSP-CELLULAR-06 AT command ready", "[bsp][cellular][at]")
         printf("AT OK: módulo acepta comandos\n");
     }
 }
+
+TEST_CASE("TEST-BSP-CELLULAR-07 Echo off", "[bsp][cellular][echo]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+    //TEST_ASSERT_TRUE_MESSAGE(CellularPowerOn(),"No se pudo encender el módulo");
+
+    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
+
+    bool echo_off = CellularEchoOff();
+    TEST_ASSERT_TRUE_MESSAGE( echo_off, "El módulo no respondió OK al comando ATE0");
+
+    if (echo_off) {
+        printf("Echo desactivado correctamente.\n");
+    }
+}

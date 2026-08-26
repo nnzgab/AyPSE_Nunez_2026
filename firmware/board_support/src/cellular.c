@@ -144,6 +144,24 @@ bool CellularSendCommand(
     return true;
 }
 
+
+
+bool CellularEchoOff(void)
+{
+    char response[128];
+
+    if (!CellularSendCommand(
+            "ATE0\r\n",
+            response,
+            sizeof(response),
+            CELLULAR_AT_TIMEOUT_MS))
+    {
+        return false;
+    }
+
+    return strstr(response, "OK") != NULL;
+}
+
 /////////////////////////////////////
 bool CellularInit(void)
 {
