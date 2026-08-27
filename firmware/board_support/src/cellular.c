@@ -254,55 +254,49 @@ bool CellularGetIMSI(char *imsi, size_t imsi_size)
 
 bool CellularWaitNetworkRegistration(uint32_t timeout_ms)
 {
-    char response[128];
-
     uint32_t elapsed_ms = 0;
 
     while (elapsed_ms < timeout_ms)
     {
-        if (!CellularSendCommand(
-                "AT+CEREG?\r\n",
-                response,
-                sizeof(response),
-                CELLULAR_AT_TIMEOUT_MS))
+        int status;
+
+        if (!CellularGetNetworkRegistration(&status))
         {
-            printf("CELLULAR: CEREG command failed\n");
+            printf("CELLULAR: Failed to get network registration\n");
+        }
+        else
+        {
+            printf(
+                "CELLULAR: Registration status = %d\n",
+                status
+            );
 
-            vTaskDelay(pdMS_TO_TICKS(CELLULAR_NETWORK_POLL_MS));
+            /*
+             * 1 = registrado en red local
+             * 5 = registrado en roaming
+             */
+            if (status == 1 || status == 5)
+            {
+                printf("CELLULAR: Network registered!\n");
+                return true;
+            }
 
-            elapsed_ms += CELLULAR_NETWORK_POLL_MS;
-
-            continue;
+            /*
+             * 3 = registro rechazado.
+             *
+             * No tiene sentido seguir esperando
+             * indefinidamente en este caso.
+             */
+            if (status == 3)
+            {
+                printf("CELLULAR: Network registration rejected\n");
+                return false;
+            }
         }
 
-        printf("CELLULAR: Checking network registration...\n");
-
-        /*
-         * Registrado en red local
-         */
-        if (strstr(response, "+CEREG: 0,1") != NULL ||
-            strstr(response, "+CEREG: 1,1") != NULL)
-        {
-            printf("CELLULAR: Registered in home network\n");
-            return true;
-        }
-
-        /*
-         * Registrado en roaming
-         */
-        if (strstr(response, "+CEREG: 0,5") != NULL ||
-            strstr(response, "+CEREG: 1,5") != NULL)
-        {
-            printf("CELLULAR: Registered in roaming\n");
-            return true;
-        }
-
-        /*
-         * Todavía no registrado.
-         */
-        printf("CELLULAR: Not registered yet\n");
-
-        vTaskDelay(pdMS_TO_TICKS(CELLULAR_NETWORK_POLL_MS));
+        vTaskDelay(
+            pdMS_TO_TICKS(CELLULAR_NETWORK_POLL_MS)
+        );
 
         elapsed_ms += CELLULAR_NETWORK_POLL_MS;
     }
