@@ -50,7 +50,11 @@ void app_main(void)
     //unity_run_tests_by_tag("[network]", false);
 
     /* Agregas esta línea para ejecutar init cellular automáticamente */
-    unity_run_tests_by_tag("[cereg]", false);
+    //unity_run_tests_by_tag("[cereg]", false);
+
+    /* Agregas esta línea para ejecutar init cellular automáticamente */
+    unity_run_tests_by_tag("[csq]", false);
+  
   
 
     UNITY_END();

@@ -134,3 +134,18 @@ TEST_CASE("TEST-BSP-CELLULAR-11 Network registration status", "[bsp][cellular][c
         printf("Estado de registro de red: %d\n", status);
     }
 }
+
+
+TEST_CASE("TEST-BSP-CELLULAR-13 Signal quality", "[bsp][cellular][csq]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+    int rssi;
+    bool ok = CellularGetSignalQuality(&rssi);
+
+    TEST_ASSERT_TRUE_MESSAGE(ok,"No se pudo obtener calidad de señal");
+
+    if (ok) {
+        printf("RSSI leído: %d\n", rssi);
+    }
+}

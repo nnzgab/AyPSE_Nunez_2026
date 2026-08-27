@@ -27,6 +27,8 @@ bool CellularGetIMSI(char *imsi, size_t imsi_size);
 bool CellularWaitNetworkRegistration(uint32_t timeout_ms);
 bool CellularGetNetworkRegistration(int *status);
 
+bool CellularGetSignalQuality(int *rssi);
+
 
 
 bool CellularIsReady(void);

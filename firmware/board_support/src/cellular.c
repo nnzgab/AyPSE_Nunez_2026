@@ -379,6 +379,67 @@ bool CellularGetNetworkRegistration(int *status)
 }
 
 
+bool CellularGetSignalQuality(int *rssi)
+{
+    char response[128];
+
+    if (rssi == NULL)
+    {
+        return false;
+    }
+
+    if (!CellularSendCommand(
+            "AT+CSQ\r\n",
+            response,
+            sizeof(response),
+            CELLULAR_AT_TIMEOUT_MS))
+    {
+        return false;
+    }
+
+    /*
+     * Ejemplo:
+     *
+     * +CSQ: 18,99
+     * OK
+     */
+
+    char *csq = strstr(response, "+CSQ:");
+
+    if (csq == NULL)
+    {
+        printf("CELLULAR: CSQ response not found\n");
+        return false;
+    }
+
+    char *colon = strchr(csq, ':');
+
+    if (colon == NULL)
+    {
+        printf("CELLULAR: Invalid CSQ response\n");
+        return false;
+    }
+
+    int signal;
+    int ber;
+
+    if (sscanf(colon + 1, "%d,%d", &signal, &ber) != 2)
+    {
+        printf("CELLULAR: Cannot parse CSQ response\n");
+        return false;
+    }
+
+    *rssi = signal;
+
+    printf(
+        "CELLULAR: Signal RSSI = %d, BER = %d\n",
+        signal,
+        ber
+    );
+
+    return true;
+}
+
 
 /////////////////////////////////////
 bool CellularInit(void)
