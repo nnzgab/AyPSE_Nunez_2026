@@ -27,6 +27,7 @@
 
 
 
+
 bool CellularPowerOn(void)//*********************** */
 {
     GPIOInit(QUECTEL_PWRKEY_PIN, GPIO_OUTPUT);
@@ -436,6 +437,129 @@ bool CellularGetSignalQuality(int *rssi)
         signal,
         ber
     );
+
+    return true;
+}
+
+
+bool CellularGetOperator(
+    char *operator_name,
+    size_t operator_size
+)
+{
+    char response[256];
+
+    if (operator_name == NULL || operator_size == 0)
+    {
+        return false;
+    }
+
+    operator_name[0] = '\0';
+
+    if (!CellularSendCommand(
+            "AT+COPS?\r\n",
+            response,
+            sizeof(response),
+            CELLULAR_AT_TIMEOUT_MS))
+    {
+        return false;
+    }
+
+    /*
+     * Ejemplo:
+     *
+     * +COPS: 0,0,"Personal",7
+     * OK
+     */
+
+    char *cops = strstr(response, "+COPS:");
+
+    if (cops == NULL)
+    {
+        printf("CELLULAR: COPS response not found\n");
+        return false;
+    }
+
+    char *first_quote = strchr(cops, '"');
+
+    if (first_quote == NULL)
+    {
+        printf("CELLULAR: Operator name not found\n");
+        return false;
+    }
+
+    first_quote++;
+
+    char *second_quote = strchr(first_quote, '"');
+
+    if (second_quote == NULL)
+    {
+        printf("CELLULAR: Invalid COPS response\n");
+        return false;
+    }
+
+    size_t length = second_quote - first_quote;
+
+    if (length >= operator_size)
+    {
+        printf("CELLULAR: Operator name buffer too small\n");
+        return false;
+    }
+
+    memcpy(operator_name, first_quote, length);
+
+    operator_name[length] = '\0';
+
+    printf(
+        "CELLULAR: Operator = %s\n",
+        operator_name
+    );
+
+    return true;
+}
+
+
+bool CellularConfigurePdp(
+    const char *apn,
+    const char *username,
+    const char *password
+)
+{
+    char command[256];
+    char response[128];
+
+    if (apn == NULL ||
+        username == NULL ||
+        password == NULL)
+    {
+        return false;
+    }
+
+    snprintf(
+        command,
+        sizeof(command),
+        "AT+QICSGP=1,1,\"%s\",\"%s\",\"%s\",1\r\n",
+        apn,
+        username,
+        password
+    );
+
+    if (!CellularSendCommand(
+            command,
+            response,
+            sizeof(response),
+            CELLULAR_AT_TIMEOUT_MS))
+    {
+        return false;
+    }
+
+    if (strstr(response, "OK") == NULL)
+    {
+        printf("CELLULAR: QICSGP failed\n");
+        return false;
+    }
+
+    printf("CELLULAR: PDP context configured\n");
 
     return true;
 }

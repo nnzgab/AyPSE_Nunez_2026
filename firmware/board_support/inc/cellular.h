@@ -5,6 +5,11 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#define CELLULAR_APN       "datos.personal.com"
+#define CELLULAR_USERNAME  "datos"
+#define CELLULAR_PASSWORD  "datos"
+
+
 
 /*==================[external functions declaration]=========================*/
 
@@ -28,6 +33,8 @@ bool CellularWaitNetworkRegistration(uint32_t timeout_ms);
 bool CellularGetNetworkRegistration(int *status);
 
 bool CellularGetSignalQuality(int *rssi);
+bool CellularGetOperator(char *operator_name, size_t operator_size);
+bool CellularConfigurePdp(const char *apn,const char *username, const char *password);
 
 
 

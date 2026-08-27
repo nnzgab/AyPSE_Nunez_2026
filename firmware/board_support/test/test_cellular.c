@@ -149,3 +149,47 @@ TEST_CASE("TEST-BSP-CELLULAR-13 Signal quality", "[bsp][cellular][csq]")
         printf("RSSI leído: %d\n", rssi);
     }
 }
+
+TEST_CASE("TEST-BSP-CELLULAR-14 Operator name", "[bsp][cellular][cops]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+    //TEST_ASSERT_TRUE_MESSAGE(CellularPowerOn(),"No se pudo encender el módulo");
+
+    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
+
+    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitNetworkRegistration(120000),"No se registró en la red");
+
+    char operator[64];
+    bool ok = CellularGetOperator(operator, sizeof(operator));
+
+    TEST_ASSERT_TRUE_MESSAGE( ok, "No se pudo obtener nombre de operador");
+
+    if (ok) {
+        printf("Operador actual: %s\n", operator);
+    }
+}
+
+
+TEST_CASE("TEST-BSP-CELLULAR-15 Configure PDP context", "[bsp][cellular][pdp]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+    //TEST_ASSERT_TRUE_MESSAGE(CellularPowerOn(),"No se pudo encender el módulo");
+    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
+    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitNetworkRegistration(120000),"No se registró en la red");
+
+    bool ok = CellularConfigurePdp(
+        CELLULAR_APN,
+        CELLULAR_USERNAME,
+        CELLULAR_PASSWORD
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE( ok, "No se pudo configurar PDP context");
+
+    if (ok) {
+        printf("PDP context configurado correctamente.\n");
+    }
+}
+
+

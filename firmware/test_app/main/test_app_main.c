@@ -53,7 +53,14 @@ void app_main(void)
     //unity_run_tests_by_tag("[cereg]", false);
 
     /* Agregas esta línea para ejecutar init cellular automáticamente */
-    unity_run_tests_by_tag("[csq]", false);
+    //unity_run_tests_by_tag("[csq]", false);
+
+    /* Agregas esta línea para ejecutar init cellular automáticamente */
+    //unity_run_tests_by_tag("[cops]", false);
+
+    /* Agregas esta línea para ejecutar init cellular automáticamente */
+    unity_run_tests_by_tag("[pdp]", false);
+  
   
   
 
