@@ -13,8 +13,11 @@
  * Configuración interna
  * ============================================================ */
 
+
+#define CELLULAR_PWRKEY_STABILIZATION_MS 31
+#define CELLULAR_PWRKEY_PULSE_ON_TIME_MS 2100
 #define CELLULAR_PWRKEY_ON_TIME_MS       100
-#define CELLULAR_PWRKEY_OFF_TIME_MS      2000
+#define CELLULAR_PWRKEY_OFF_TIME_MS      2100
 #define CELLULAR_BOOT_WAIT_MS            5000
 
 #define CELLULAR_AT_TIMEOUT_MS           1000
@@ -23,20 +26,31 @@
 
 #define CELLULAR_NETWORK_POLL_MS       1000
 #define CELLULAR_NETWORK_TIMEOUT_MS    120000
+#define CELLULAR_QIACT_TIMEOUT_MS    160000
+
+#define CELLULAR_QIOPEN_COMMAND_TIMEOUT_MS    5000
+#define CELLULAR_QIOPEN_RESULT_TIMEOUT_MS    30000
 
 
 
 
-
-bool CellularPowerOn(void)//*********************** */
+bool CellularPowerOn(void)
 {
     GPIOInit(QUECTEL_PWRKEY_PIN, GPIO_OUTPUT);
+
+    // Asegurar línea liberada (no presionado) antes de iniciar
     GPIOOff(QUECTEL_PWRKEY_PIN);
-    vTaskDelay(pdMS_TO_TICKS(CELLULAR_PWRKEY_ON_TIME_MS));
+    vTaskDelay(pdMS_TO_TICKS(CELLULAR_PWRKEY_STABILIZATION_MS)); // >= 30 ms
+
+    // Presionar PWRKEY (HIGH -> transistor satura -> PWRKEY a GND)
     GPIOOn(QUECTEL_PWRKEY_PIN);
+    vTaskDelay(pdMS_TO_TICKS(CELLULAR_PWRKEY_PULSE_ON_TIME_MS)); // >= 2000 ms
+
+    // Soltar PWRKEY (LOW -> transistor corta -> PWRKEY flota a alto vía pull-up)
+    GPIOOff(QUECTEL_PWRKEY_PIN);
+
     return true;
 }
-
 
 
 bool CellularWaitReady(uint32_t timeout_ms)/************* */
@@ -89,7 +103,6 @@ bool CellularIsReady(void)
  * Envío de comandos AT
  * ============================================================ */
 
- bool CellularSendCommand( const char *command, char *response, size_t response_size, uint32_t timeout_ms);
 
 bool CellularSendCommand(
     const char *command,
@@ -562,6 +575,313 @@ bool CellularConfigurePdp(
     printf("CELLULAR: PDP context configured\n");
 
     return true;
+}
+
+
+
+bool CellularActivatePdp(void)
+{
+    char response[128];
+
+    if (!CellularSendCommand(
+            "AT+QIACT=1\r\n",
+            response,
+            sizeof(response),
+            CELLULAR_QIACT_TIMEOUT_MS))
+    {
+        printf("CELLULAR: QIACT command failed\n");
+        return false;
+    }
+
+    if (strstr(response, "OK") == NULL)
+    {
+        printf("CELLULAR: PDP activation failed\n");
+        return false;
+    }
+
+    printf("CELLULAR: PDP context activated\n");
+
+    return true;
+}
+
+
+
+bool CellularGetPdpStatus( bool *active, char *ip_address, size_t ip_address_size)
+{
+    char response[256];
+
+    if (active == NULL ||
+        ip_address == NULL ||
+        ip_address_size == 0)
+    {
+        return false;
+    }
+
+    *active = false;
+    ip_address[0] = '\0';
+
+    if (!CellularSendCommand(
+            "AT+QIACT?\r\n",
+            response,
+            sizeof(response),
+            CELLULAR_AT_TIMEOUT_MS))
+    {
+        printf("CELLULAR: QIACT? command failed\n");
+        return false;
+    }
+
+    /*
+     * Ejemplo:
+     *
+     * +QIACT: 1,1,1,"10.123.45.67"
+     * OK
+     */
+
+    char *qiact = strstr(response, "+QIACT:");
+
+    if (qiact == NULL)
+    {
+        printf("CELLULAR: QIACT response not found\n");
+        return false;
+    }
+
+    int context_id;
+    int context_state;
+    int context_type;
+
+    char ip[64];
+
+    int parsed = sscanf(
+        qiact,
+        "+QIACT: %d,%d,%d,\"%63[^\"]\"",
+        &context_id,
+        &context_state,
+        &context_type,
+        ip
+    );
+
+    if (parsed != 4)
+    {
+        printf("CELLULAR: Cannot parse QIACT response\n");
+        return false;
+    }
+
+    printf(
+        "CELLULAR: PDP ID=%d STATE=%d TYPE=%d IP=%s\n",
+        context_id,
+        context_state,
+        context_type,
+        ip
+    );
+
+    /*
+     * Nos interesa específicamente el contexto 1.
+     */
+    if (context_id != 1)
+    {
+        printf("CELLULAR: Unexpected PDP context ID\n");
+        return false;
+    }
+
+    /*
+     * context_state == 1 significa activo.
+     */
+    if (context_state == 1)
+    {
+        *active = true;
+    }
+
+    /*
+     * Copiamos la IP al buffer del usuario.
+     */
+    if (strlen(ip) >= ip_address_size)
+    {
+        printf("CELLULAR: IP buffer too small\n");
+        return false;
+    }
+
+    strcpy(ip_address, ip);
+
+    return true;
+}
+
+
+
+
+bool CellularOpenTcp(
+    int socket_id,
+    const char *server,
+    uint16_t port
+)
+{
+    char command[256];
+    char response[128];
+
+    if (server == NULL)
+    {
+        return false;
+    }
+
+    snprintf(
+        command,
+        sizeof(command),
+        "AT+QIOPEN=1,%d,\"TCP\",\"%s\",%u,0,0\r\n",
+        socket_id,
+        server,
+        port
+    );
+
+    printf(
+        "CELLULAR: Opening TCP connection to %s:%u\n",
+        server,
+        port
+    );
+    /*
+     * --------------------------------------------------------
+     * ETAPA 1:
+     * Enviar QIOPEN y esperar respuesta inmediata.
+     * --------------------------------------------------------
+     */
+    /*
+     * Primero esperamos la respuesta inmediata.
+     */
+    if (!CellularSendCommand(
+            command,
+            response,
+            sizeof(response),
+            CELLULAR_QIOPEN_COMMAND_TIMEOUT_MS))
+    {
+        printf("CELLULAR: QIOPEN command failed\n");
+        return false;
+    }
+
+    /*
+     * QIOPEN debe devolver OK inmediatamente.
+     */
+    if (strstr(response, "OK") == NULL)
+    {
+        printf("CELLULAR: QIOPEN rejected\n");
+        return false;
+    }
+
+    printf(
+        "CELLULAR: QIOPEN accepted, waiting for connection result...\n"
+    );
+    /*
+     * --------------------------------------------------------
+     * ETAPA 2:
+     * Esperar URC:
+     *
+     * +QIOPEN: <socket_id>,<result>
+     * --------------------------------------------------------
+     */
+
+    char expected[64];
+    char urc_response[256];
+
+    snprintf(
+        expected,
+        sizeof(expected),
+        "+QIOPEN: %d,0",
+        socket_id
+    );
+
+    if (!CellularWaitForResponse(
+            expected,
+            urc_response,
+            sizeof(urc_response),
+            CELLULAR_QIOPEN_RESULT_TIMEOUT_MS))
+    {
+        printf(
+            "CELLULAR: TCP connection failed or timeout\n"
+        );
+
+        return false;
+    }
+
+    printf("CELLULAR: TCP connection established\n");
+
+    return true;
+}
+
+
+
+bool CellularWaitForResponse(
+    const char *expected,
+    char *response,
+    size_t response_size,
+    uint32_t timeout_ms
+)
+{
+    if (expected == NULL ||
+        response == NULL ||
+        response_size == 0)
+    {
+        return false;
+    }
+
+    response[0] = '\0';
+
+    uint32_t elapsed_ms = 0;
+
+    while (elapsed_ms < timeout_ms)
+    {
+        char buffer[128];
+
+        int len = UartHalReadBytes(
+            buffer,
+            sizeof(buffer) - 1,
+            CELLULAR_AT_TIMEOUT_MS
+        );
+
+        if (len > 0)
+        {
+            buffer[len] = '\0';
+
+            printf("CELLULAR WAIT RX: %s\n", buffer);
+
+            //printf("CELLULAR URC RX: %s\n", buffer);
+
+            /*
+             * Agregamos los datos recibidos al buffer
+             * acumulado.
+             */
+            size_t current_length = strlen(response);
+
+            if (current_length + len < response_size)
+            {
+                memcpy(
+                    response + current_length,
+                    buffer,
+                    len
+                );
+
+                response[current_length + len] = '\0';
+            }
+
+            /*
+             * ¿Llegó la respuesta que estábamos esperando?
+             */
+            if (strstr(response, expected) != NULL)
+            {
+                printf(
+                    "CELLULAR: Expected response received: %s\n",
+                    expected
+                );
+
+                return true;
+            }
+        }
+
+        elapsed_ms += CELLULAR_AT_TIMEOUT_MS;
+    }
+
+    printf(
+        "CELLULAR: Timeout waiting for: %s\n",
+        expected
+    );
+
+    return false;
 }
 
 

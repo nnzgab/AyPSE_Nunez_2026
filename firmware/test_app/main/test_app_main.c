@@ -59,9 +59,16 @@ void app_main(void)
     //unity_run_tests_by_tag("[cops]", false);
 
     /* Agregas esta línea para ejecutar init cellular automáticamente */
-    unity_run_tests_by_tag("[pdp]", false);
-  
-  
+    //unity_run_tests_by_tag("[pdp]", false);
+
+        /* Agregas esta línea para ejecutar init cellular automáticamente */
+    //unity_run_tests_by_tag("[act-pdp]", false);
+
+           /* Agregas esta línea para ejecutar init cellular automáticamente */
+    //unity_run_tests_by_tag("[pdp-status]", false);
+
+          /* Agregas esta línea para ejecutar init cellular automáticamente */
+    unity_run_tests_by_tag("[tcp]", false);
   
 
     UNITY_END();

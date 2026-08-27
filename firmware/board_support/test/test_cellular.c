@@ -11,6 +11,9 @@
 #include <stdio.h>
 
 
+
+
+
 TEST_CASE(
     "TEST-BSP-CELLULAR-04 Power on module and wait RDY",
     "[bsp][cellular][poweron][ready]"
@@ -175,9 +178,9 @@ TEST_CASE("TEST-BSP-CELLULAR-15 Configure PDP context", "[bsp][cellular][pdp]")
 {
     UartHalInit(UART_BAUDRATE);
 
-    //TEST_ASSERT_TRUE_MESSAGE(CellularPowerOn(),"No se pudo encender el módulo");
-    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
-    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitNetworkRegistration(120000),"No se registró en la red");
+    TEST_ASSERT_TRUE_MESSAGE(CellularPowerOn(),"No se pudo encender el módulo");
+    TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
+    TEST_ASSERT_TRUE_MESSAGE(CellularWaitNetworkRegistration(120000),"No se registró en la red");
 
     bool ok = CellularConfigurePdp(
         CELLULAR_APN,
@@ -193,3 +196,197 @@ TEST_CASE("TEST-BSP-CELLULAR-15 Configure PDP context", "[bsp][cellular][pdp]")
 }
 
 
+TEST_CASE("TEST-BSP-CELLULAR-16 Activate PDP context", "[bsp][cellular][act-pdp]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+    TEST_ASSERT_TRUE_MESSAGE( CellularPowerOn(), "No se pudo encender el módulo");
+
+    //printf("hola///////////gdfg///////.\n");
+    //GPIOOff(QUECTEL_PWRKEY_PIN);
+
+    TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
+    TEST_ASSERT_TRUE_MESSAGE( CellularWaitNetworkRegistration(120000),"No se registró en la red");
+    TEST_ASSERT_TRUE_MESSAGE(CellularConfigurePdp(CELLULAR_APN, CELLULAR_USERNAME, CELLULAR_PASSWORD),"No se pudo configurar PDP context");
+
+    bool ok = CellularActivatePdp();
+    GPIOOff(QUECTEL_PWRKEY_PIN);
+
+    TEST_ASSERT_TRUE_MESSAGE( ok, "No se pudo activar PDP context");
+
+    if (ok) {
+        printf("PDP context activado correctamente.\n");
+    }
+  
+}
+
+
+TEST_CASE(
+    "TEST-BSP-CELLULAR-17 PDP status and IP",
+    "[bsp][cellular][pdp-status]"
+)
+{
+    UartHalInit(UART_BAUDRATE);
+
+//    TEST_ASSERT_TRUE_MESSAGE( CellularPowerOn(), "No se pudo encender el módulo");
+
+//    TEST_ASSERT_TRUE_MESSAGE( CellularWaitReady(10000), "No se recibió RDY");
+
+//    TEST_ASSERT_TRUE_MESSAGE( CellularWaitNetworkRegistration(120000), "No se registró en la red");
+/*
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularConfigurePdp(
+            CELLULAR_APN,
+            CELLULAR_USERNAME,
+            CELLULAR_PASSWORD
+        ),
+        "No se pudo configurar PDP"
+    );
+*/
+//    TEST_ASSERT_TRUE_MESSAGE( CellularActivatePdp(), "No se pudo activar PDP");
+
+    bool active;
+    char ip_address[64];
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularGetPdpStatus(
+            &active,
+            ip_address,
+            sizeof(ip_address)
+        ),
+        "No se pudo consultar estado PDP"
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        active,
+        "El contexto PDP no está activo"
+    );
+
+    printf(
+        "PDP activo. IP asignada: %s\n",
+        ip_address
+    );
+
+    //GPIOOff(QUECTEL_PWRKEY_PIN);
+}
+
+
+TEST_CASE(
+    "TEST-BSP-CELLULAR-18 QIOPEN diagnostic",
+    "[bsp][cellular][tcp]"
+)
+{
+    UartHalInit(UART_BAUDRATE);
+
+    TEST_ASSERT_TRUE_MESSAGE(CellularPowerOn(),"No se pudo encender el módulo");
+
+    TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
+
+    TEST_ASSERT_TRUE_MESSAGE(CellularWaitNetworkRegistration(120000),"No se registró en la red");
+
+    TEST_ASSERT_TRUE_MESSAGE(CellularConfigurePdp(CELLULAR_APN, CELLULAR_USERNAME,CELLULAR_PASSWORD),"No se pudo configurar PDP");
+
+    TEST_ASSERT_TRUE_MESSAGE(CellularActivatePdp(),"No se pudo activar PDP");
+
+    bool active;
+    char ip_address[64];
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularGetPdpStatus(
+            &active,
+            ip_address,
+            sizeof(ip_address)
+        ),
+        "No se pudo consultar PDP"
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        active,
+        "El contexto PDP no esta activo"
+    );
+
+    printf(
+        "\nPDP activo. IP: %s\n",
+        ip_address
+    );
+
+    /*
+     * --------------------------------------------------------
+     * QIOPEN
+     * --------------------------------------------------------
+     */
+
+    char command[256];
+    char response[256];
+
+    snprintf(
+        command,
+        sizeof(command),
+        "AT+QIOPEN=1,0,\"TCP\",\"%s\",%d,0,0\r\n",
+        CELLULAR_TCP_TEST_SERVER,
+        CELLULAR_TCP_TEST_PORT
+    );
+
+    printf(
+        "\n========== QIOPEN TEST ==========\n"
+    );
+
+    printf(
+        "TX: %s\n",
+        command
+    );
+
+    /*
+     * Primero observamos la respuesta inmediata.
+     */
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularSendCommand(
+            command,
+            response,
+            sizeof(response),
+            5000
+        ),
+        "No se obtuvo respuesta de QIOPEN"
+    );
+
+    printf(
+        "\n========== QIOPEN FIRST RESPONSE ==========\n"
+    );
+
+    printf(
+        "%s\n",
+        response
+    );
+
+    /*
+     * Ahora esperamos la URC.
+     */
+
+    char urc_response[256];
+
+    bool urc_ok = CellularWaitForResponse(
+        "+QIOPEN: 0,0",
+        urc_response,
+        sizeof(urc_response),
+        30000
+    );
+
+    printf(
+        "\n========== QIOPEN URC ==========\n"
+    );
+
+    printf(
+        "%s\n",
+        urc_response
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        urc_ok,
+        "No se recibio +QIOPEN: 0,0"
+    );
+
+    printf(
+        "\nTCP conectado correctamente.\n"
+    );
+}

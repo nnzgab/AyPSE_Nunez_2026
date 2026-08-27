@@ -9,6 +9,10 @@
 #define CELLULAR_USERNAME  "datos"
 #define CELLULAR_PASSWORD  "datos"
 
+#define CELLULAR_TCP_TEST_SERVER "tcpbin.com"
+#define CELLULAR_TCP_TEST_PORT   4242
+
+
 
 
 /*==================[external functions declaration]=========================*/
@@ -35,6 +39,29 @@ bool CellularGetNetworkRegistration(int *status);
 bool CellularGetSignalQuality(int *rssi);
 bool CellularGetOperator(char *operator_name, size_t operator_size);
 bool CellularConfigurePdp(const char *apn,const char *username, const char *password);
+bool CellularActivatePdp(void);
+
+/*
+return false → no pude ejecutar/interpretar QIACT?
+return true  → pude consultar correctamente
+
+active = true  → hay contexto activo
+active = false → no hay contexto activo
+*/
+bool CellularGetPdpStatus( bool *active, char *ip_address, size_t ip_address_size);
+
+/*funcion para comportamiento asincronico*/
+bool CellularOpenTcp( int socket_id, const char *server, uint16_t port);
+
+bool CellularSendCommand( const char *command, char *response, size_t response_size, uint32_t timeout_ms);
+
+
+bool CellularWaitForResponse(
+    const char *expected,
+    char *response,
+    size_t response_size,
+    uint32_t timeout_ms
+);
 
 
 
