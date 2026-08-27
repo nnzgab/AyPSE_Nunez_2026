@@ -313,6 +313,78 @@ bool CellularWaitNetworkRegistration(uint32_t timeout_ms)
 }
 
 
+bool CellularGetNetworkRegistration(int *status)
+{
+    char response[128];
+
+    if (status == NULL)
+    {
+        return false;
+    }
+
+    if (!CellularSendCommand(
+            "AT+CEREG?\r\n",
+            response,
+            sizeof(response),
+            CELLULAR_AT_TIMEOUT_MS))
+    {
+        return false;
+    }
+
+    /*
+     * Buscamos la respuesta +CEREG.
+     *
+     * Ejemplo:
+     * +CEREG: 0,2
+     * OK
+     */
+    char *cereg = strstr(response, "+CEREG:");
+
+    if (cereg == NULL)
+    {
+        printf("CELLULAR: CEREG response not found\n");
+        return false;
+    }
+
+    /*
+     * Buscamos la coma.
+     *
+     * +CEREG: 0,2
+     *          ^
+     */
+    char *comma = strchr(cereg, ',');
+
+    if (comma == NULL)
+    {
+        printf("CELLULAR: Invalid CEREG response\n");
+        return false;
+    }
+
+    /*
+     * El estado está después de la coma.
+     *
+     * +CEREG: 0,2
+     *            ^
+     */
+    int registration_status;
+
+    if (sscanf(comma + 1, "%d", &registration_status) != 1)
+    {
+        printf("CELLULAR: Cannot parse CEREG status\n");
+        return false;
+    }
+
+    *status = registration_status;
+
+    printf(
+        "CELLULAR: Network registration status = %d\n",
+        *status
+    );
+
+    return true;
+}
+
+
 
 /////////////////////////////////////
 bool CellularInit(void)

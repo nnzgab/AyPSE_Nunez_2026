@@ -100,3 +100,37 @@ TEST_CASE("TEST-BSP-CELLULAR-09 IMSI read", "[bsp][cellular][imsi]")
         printf("IMSI leído: %s\n", imsi);
     }
 }
+
+
+TEST_CASE("TEST-BSP-CELLULAR-10 Network registration", "[bsp][cellular][network]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+    printf("Waiting for cellular network registration...\n");
+
+    bool registered = CellularWaitNetworkRegistration(120000); // 2 minutos
+
+    TEST_ASSERT_TRUE_MESSAGE(registered, "ERROR: CellularWaitNetworkRegistration()");
+
+    if (registered) {
+        printf("Cellular network registered!\n");
+    }
+}
+
+
+TEST_CASE("TEST-BSP-CELLULAR-11 Network registration status", "[bsp][cellular][cereg]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+    //TEST_ASSERT_TRUE_MESSAGE(CellularPowerOn(), "No se pudo encender el módulo");
+    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000), "No se recibió RDY");
+
+    int status;
+    bool ok = CellularGetNetworkRegistration(&status);
+
+    TEST_ASSERT_TRUE_MESSAGE(ok, "No se pudo obtener estado de registro");
+
+    if (ok) {
+        printf("Estado de registro de red: %d\n", status);
+    }
+}
