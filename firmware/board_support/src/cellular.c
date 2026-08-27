@@ -251,6 +251,69 @@ bool CellularGetIMSI(char *imsi, size_t imsi_size)
 
     return true;
 }
+
+bool CellularWaitNetworkRegistration(uint32_t timeout_ms)
+{
+    char response[128];
+
+    uint32_t elapsed_ms = 0;
+
+    while (elapsed_ms < timeout_ms)
+    {
+        if (!CellularSendCommand(
+                "AT+CEREG?\r\n",
+                response,
+                sizeof(response),
+                CELLULAR_AT_TIMEOUT_MS))
+        {
+            printf("CELLULAR: CEREG command failed\n");
+
+            vTaskDelay(pdMS_TO_TICKS(CELLULAR_NETWORK_POLL_MS));
+
+            elapsed_ms += CELLULAR_NETWORK_POLL_MS;
+
+            continue;
+        }
+
+        printf("CELLULAR: Checking network registration...\n");
+
+        /*
+         * Registrado en red local
+         */
+        if (strstr(response, "+CEREG: 0,1") != NULL ||
+            strstr(response, "+CEREG: 1,1") != NULL)
+        {
+            printf("CELLULAR: Registered in home network\n");
+            return true;
+        }
+
+        /*
+         * Registrado en roaming
+         */
+        if (strstr(response, "+CEREG: 0,5") != NULL ||
+            strstr(response, "+CEREG: 1,5") != NULL)
+        {
+            printf("CELLULAR: Registered in roaming\n");
+            return true;
+        }
+
+        /*
+         * Todavía no registrado.
+         */
+        printf("CELLULAR: Not registered yet\n");
+
+        vTaskDelay(pdMS_TO_TICKS(CELLULAR_NETWORK_POLL_MS));
+
+        elapsed_ms += CELLULAR_NETWORK_POLL_MS;
+    }
+
+    printf("CELLULAR: Network registration timeout\n");
+
+    return false;
+}
+
+
+
 /////////////////////////////////////
 bool CellularInit(void)
 {
