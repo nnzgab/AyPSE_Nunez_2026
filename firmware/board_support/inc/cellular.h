@@ -55,6 +55,7 @@ bool CellularGetPdpStatus( bool *active, char *ip_address, size_t ip_address_siz
 
 /*funcion para comportamiento asincronico*/
 bool CellularOpenTcp( int socket_id, const char *server, uint16_t port);
+bool CellularCloseTcp(int socket_id);
 
 bool CellularSendCommand( const char *command, char *response, size_t response_size, uint32_t timeout_ms);
 

@@ -31,6 +31,7 @@
 #define CELLULAR_QIOPEN_COMMAND_TIMEOUT_MS    5000
 #define CELLULAR_QIOPEN_RESULT_TIMEOUT_MS    30000
 
+#define CELLULAR_TCP_COMMAND_TIMEOUT_MS 5000
 
 
 
@@ -706,6 +707,54 @@ bool CellularGetPdpStatus( bool *active, char *ip_address, size_t ip_address_siz
 }
 
 
+static bool CellularGetQioOpenResult(
+    const char *response,
+    int socket_id,
+    int *result
+);
+
+static bool CellularGetQioOpenResult(
+    const char *response,
+    int socket_id,
+    int *result
+)
+{
+    if (response == NULL || result == NULL)
+    {
+        return false;
+    }
+
+    char prefix[32];
+
+    snprintf(
+        prefix,
+        sizeof(prefix),
+        "+QIOPEN: %d,",
+        socket_id
+    );
+
+    const char *qioopen = strstr(response, prefix);
+
+    if (qioopen == NULL)
+    {
+        return false;
+    }
+
+    qioopen += strlen(prefix);
+
+    if (sscanf(qioopen, "%d", result) != 1)
+    {
+        return false;
+    }
+
+    printf(
+        "CELLULAR: QIOPEN socket=%d result=%d\n",
+        socket_id,
+        *result
+    );
+
+    return true;
+}
 
 
 bool CellularOpenTcp(
@@ -715,7 +764,7 @@ bool CellularOpenTcp(
 )
 {
     char command[256];
-    char response[128];
+    char response[256];
 
     if (server == NULL)
     {
@@ -736,15 +785,23 @@ bool CellularOpenTcp(
         server,
         port
     );
+
     /*
      * --------------------------------------------------------
      * ETAPA 1:
      * Enviar QIOPEN y esperar respuesta inmediata.
+     *
+     * Puede llegar:
+     *
+     * OK
+     *
+     * o:
+     *
+     * OK
+     * +QIOPEN: socket,result
      * --------------------------------------------------------
      */
-    /*
-     * Primero esperamos la respuesta inmediata.
-     */
+
     if (!CellularSendCommand(
             command,
             response,
@@ -756,29 +813,76 @@ bool CellularOpenTcp(
     }
 
     /*
-     * QIOPEN debe devolver OK inmediatamente.
+     * QIOPEN debe aceptar el comando con OK.
      */
+
     if (strstr(response, "OK") == NULL)
     {
         printf("CELLULAR: QIOPEN rejected\n");
         return false;
     }
 
-    char expected[64];
-    snprintf(expected, sizeof(expected), "+QIOPEN: %d,0", socket_id);
-
     /*
-     * Puede que la URC ya haya llegado pegada al OK, dentro de la
-     * misma lectura de CellularSendCommand (conexión muy rápida).
-     * Si ya está en 'response', no hace falta esperarla de nuevo.
+     * --------------------------------------------------------
+     * ETAPA 2:
+     * Verificar si +QIOPEN ya llegó junto al OK.
+     * --------------------------------------------------------
      */
-    if (strstr(response, expected) != NULL)
+
+    char expected[64];
+
+    snprintf(
+        expected,
+        sizeof(expected),
+        "+QIOPEN: %d,",
+        socket_id
+    );
+
+    int result;
+
+    if (CellularGetQioOpenResult(
+            response,
+            socket_id,
+            &result))
     {
-        printf("CELLULAR: TCP connection established (URC llegó junto al OK)\n");
-        return true;
+        printf(
+            "CELLULAR: QIOPEN socket=%d result=%d\n",
+            socket_id,
+            result
+        );
+
+        if (result == 0)
+        {
+            printf(
+                "CELLULAR: TCP connection established "
+                "(URC llegó junto al OK)\n"
+            );
+
+            return true;
+        }
+
+        printf(
+            "CELLULAR: TCP connection failed, result=%d\n",
+            result
+        );
+
+        return false;
     }
 
-    printf("CELLULAR: QIOPEN accepted, waiting for connection result...\n");
+    /*
+     * --------------------------------------------------------
+     * ETAPA 3:
+     * La URC todavía no llegó.
+     * Esperamos:
+     *
+     * +QIOPEN: socket,result
+     * --------------------------------------------------------
+     */
+
+    printf(
+        "CELLULAR: QIOPEN accepted, "
+        "waiting for connection result...\n"
+    );
 
     char urc_response[256];
 
@@ -788,11 +892,101 @@ bool CellularOpenTcp(
             sizeof(urc_response),
             CELLULAR_QIOPEN_RESULT_TIMEOUT_MS))
     {
-        printf("CELLULAR: TCP connection failed or timeout\n");
+        printf(
+            "CELLULAR: Timeout waiting for QIOPEN result\n"
+        );
+
         return false;
     }
 
-    printf("CELLULAR: TCP connection established\n");
+    /*
+     * --------------------------------------------------------
+     * ETAPA 4:
+     * Analizar la URC recibida.
+     * --------------------------------------------------------
+     */
+
+    if (!CellularGetQioOpenResult(
+            urc_response,
+            socket_id,
+            &result))
+    {
+        printf(
+            "CELLULAR: Invalid QIOPEN result\n"
+        );
+
+        return false;
+    }
+
+    printf(
+        "CELLULAR: QIOPEN socket=%d result=%d\n",
+        socket_id,
+        result
+    );
+
+    if (result != 0)
+    {
+        printf(
+            "CELLULAR: TCP connection failed, result=%d\n",
+            result
+        );
+
+        return false;
+    }
+
+    printf(
+        "CELLULAR: TCP connection established\n"
+    );
+
+    return true;
+}
+
+
+
+bool CellularCloseTcp(int socket_id)
+{
+    char command[64];
+    char response[128];
+
+    snprintf(
+        command,
+        sizeof(command),
+        "AT+QICLOSE=%d\r\n",
+        socket_id
+    );
+
+    printf(
+        "CELLULAR: Closing TCP socket %d\n",
+        socket_id
+    );
+
+    if (!CellularSendCommand(
+            command,
+            response,
+            sizeof(response),
+            CELLULAR_TCP_COMMAND_TIMEOUT_MS))
+    {
+        printf(
+            "CELLULAR: QICLOSE command failed\n"
+        );
+
+        return false;
+    }
+
+    if (strstr(response, "OK") == NULL)
+    {
+        printf(
+            "CELLULAR: QICLOSE rejected\n"
+        );
+
+        return false;
+    }
+
+    printf(
+        "CELLULAR: TCP socket %d closed\n",
+        socket_id
+    );
+
     return true;
 }
 

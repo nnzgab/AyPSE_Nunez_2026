@@ -269,8 +269,6 @@ TEST_CASE(
 
     //GPIOOff(QUECTEL_PWRKEY_PIN);
 }
-
-
 TEST_CASE(
     "TEST-BSP-CELLULAR-18 QIOPEN diagnostic",
     "[bsp][cellular][tcp]"
@@ -282,25 +280,48 @@ TEST_CASE(
     char ip_address[64];
 
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularGetPdpStatus(&active, ip_address, sizeof(ip_address)),
+        CellularGetPdpStatus(
+            &active,
+            ip_address,
+            sizeof(ip_address)
+        ),
         "No se pudo consultar PDP"
     );
 
-    TEST_ASSERT_TRUE_MESSAGE(active, "El contexto PDP no esta activo");
+    TEST_ASSERT_TRUE_MESSAGE(
+        active,
+        "El contexto PDP no esta activo"
+    );
 
-    printf("\nPDP activo. IP: %s\n", ip_address);
+    printf(
+        "\nPDP activo. IP: %s\n",
+        ip_address
+    );
 
     /*
+     * Diagnóstico y limpieza de sockets anteriores.
+     *
+     * Esto es útil durante el desarrollo porque el EG915U
+     * puede conservar sockets aunque el ESP32 se reinicie.
+     */
+    /**/
     CellularPrintSocketState();
     CellularCloseAllSockets();
     CellularPrintSocketState();
 
+    /*
+     * Abrir conexión TCP.
+     */
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularOpenTcp(0, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
+        CellularOpenTcp(
+            0,
+            CELLULAR_TCP_TEST_SERVER,
+            CELLULAR_TCP_TEST_PORT
+        ),
         "No se pudo abrir la conexion TCP"
     );
-    */
-   TEST_ASSERT_TRUE_MESSAGE(CellularOpenTcp(0,CELLULAR_TCP_TEST_SERVER,CELLULAR_TCP_TEST_PORT), "No se pudo abrir la conexion TCP");
 
-    printf("\nTCP conectado correctamente.\n");
+    printf(
+        "\nTCP conectado correctamente.\n"
+    );
 }
