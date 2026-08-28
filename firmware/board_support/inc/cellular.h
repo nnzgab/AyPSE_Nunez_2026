@@ -9,6 +9,9 @@
 #define CELLULAR_USERNAME  "datos"
 #define CELLULAR_PASSWORD  "datos"
 
+//#define CELLULAR_TCP_TEST_SERVER "54.175.103.105" //"tcpbin.com"
+//#define CELLULAR_TCP_TEST_PORT   30000 //4242
+
 #define CELLULAR_TCP_TEST_SERVER "tcpbin.com"
 #define CELLULAR_TCP_TEST_PORT   4242
 
@@ -62,6 +65,9 @@ bool CellularWaitForResponse(
     size_t response_size,
     uint32_t timeout_ms
 );
+
+bool CellularPrintSocketState(void);
+void CellularCloseAllSockets(void);
 
 
 

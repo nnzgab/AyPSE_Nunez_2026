@@ -278,115 +278,29 @@ TEST_CASE(
 {
     UartHalInit(UART_BAUDRATE);
 
-    TEST_ASSERT_TRUE_MESSAGE(CellularPowerOn(),"No se pudo encender el módulo");
-
-    TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
-
-    TEST_ASSERT_TRUE_MESSAGE(CellularWaitNetworkRegistration(120000),"No se registró en la red");
-
-    TEST_ASSERT_TRUE_MESSAGE(CellularConfigurePdp(CELLULAR_APN, CELLULAR_USERNAME,CELLULAR_PASSWORD),"No se pudo configurar PDP");
-
-    TEST_ASSERT_TRUE_MESSAGE(CellularActivatePdp(),"No se pudo activar PDP");
-
     bool active;
     char ip_address[64];
 
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularGetPdpStatus(
-            &active,
-            ip_address,
-            sizeof(ip_address)
-        ),
+        CellularGetPdpStatus(&active, ip_address, sizeof(ip_address)),
         "No se pudo consultar PDP"
     );
 
-    TEST_ASSERT_TRUE_MESSAGE(
-        active,
-        "El contexto PDP no esta activo"
-    );
+    TEST_ASSERT_TRUE_MESSAGE(active, "El contexto PDP no esta activo");
 
-    printf(
-        "\nPDP activo. IP: %s\n",
-        ip_address
-    );
+    printf("\nPDP activo. IP: %s\n", ip_address);
 
     /*
-     * --------------------------------------------------------
-     * QIOPEN
-     * --------------------------------------------------------
-     */
-
-    char command[256];
-    char response[256];
-
-    snprintf(
-        command,
-        sizeof(command),
-        "AT+QIOPEN=1,0,\"TCP\",\"%s\",%d,0,0\r\n",
-        CELLULAR_TCP_TEST_SERVER,
-        CELLULAR_TCP_TEST_PORT
-    );
-
-    printf(
-        "\n========== QIOPEN TEST ==========\n"
-    );
-
-    printf(
-        "TX: %s\n",
-        command
-    );
-
-    /*
-     * Primero observamos la respuesta inmediata.
-     */
+    CellularPrintSocketState();
+    CellularCloseAllSockets();
+    CellularPrintSocketState();
 
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularSendCommand(
-            command,
-            response,
-            sizeof(response),
-            5000
-        ),
-        "No se obtuvo respuesta de QIOPEN"
+        CellularOpenTcp(0, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
+        "No se pudo abrir la conexion TCP"
     );
+    */
+   TEST_ASSERT_TRUE_MESSAGE(CellularOpenTcp(0,CELLULAR_TCP_TEST_SERVER,CELLULAR_TCP_TEST_PORT), "No se pudo abrir la conexion TCP");
 
-    printf(
-        "\n========== QIOPEN FIRST RESPONSE ==========\n"
-    );
-
-    printf(
-        "%s\n",
-        response
-    );
-
-    /*
-     * Ahora esperamos la URC.
-     */
-
-    char urc_response[256];
-
-    bool urc_ok = CellularWaitForResponse(
-        "+QIOPEN: 0,0",
-        urc_response,
-        sizeof(urc_response),
-        30000
-    );
-
-    printf(
-        "\n========== QIOPEN URC ==========\n"
-    );
-
-    printf(
-        "%s\n",
-        urc_response
-    );
-
-    TEST_ASSERT_TRUE_MESSAGE(
-        urc_ok,
-        "No se recibio +QIOPEN: 0,0"
-    );
-
-    printf(
-        "\nTCP conectado correctamente.\n"
-    );
+    printf("\nTCP conectado correctamente.\n");
 }

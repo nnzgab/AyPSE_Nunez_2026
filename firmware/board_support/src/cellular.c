@@ -764,27 +764,23 @@ bool CellularOpenTcp(
         return false;
     }
 
-    printf(
-        "CELLULAR: QIOPEN accepted, waiting for connection result...\n"
-    );
-    /*
-     * --------------------------------------------------------
-     * ETAPA 2:
-     * Esperar URC:
-     *
-     * +QIOPEN: <socket_id>,<result>
-     * --------------------------------------------------------
-     */
-
     char expected[64];
-    char urc_response[256];
+    snprintf(expected, sizeof(expected), "+QIOPEN: %d,0", socket_id);
 
-    snprintf(
-        expected,
-        sizeof(expected),
-        "+QIOPEN: %d,0",
-        socket_id
-    );
+    /*
+     * Puede que la URC ya haya llegado pegada al OK, dentro de la
+     * misma lectura de CellularSendCommand (conexión muy rápida).
+     * Si ya está en 'response', no hace falta esperarla de nuevo.
+     */
+    if (strstr(response, expected) != NULL)
+    {
+        printf("CELLULAR: TCP connection established (URC llegó junto al OK)\n");
+        return true;
+    }
+
+    printf("CELLULAR: QIOPEN accepted, waiting for connection result...\n");
+
+    char urc_response[256];
 
     if (!CellularWaitForResponse(
             expected,
@@ -792,17 +788,17 @@ bool CellularOpenTcp(
             sizeof(urc_response),
             CELLULAR_QIOPEN_RESULT_TIMEOUT_MS))
     {
-        printf(
-            "CELLULAR: TCP connection failed or timeout\n"
-        );
-
+        printf("CELLULAR: TCP connection failed or timeout\n");
         return false;
     }
 
     printf("CELLULAR: TCP connection established\n");
-
     return true;
 }
+
+
+
+
 
 
 
@@ -884,6 +880,62 @@ bool CellularWaitForResponse(
     return false;
 }
 
+
+/**
+ * Consulta el estado de los sockets vía AT+QISTATE? y lo imprime por consola.
+ * Devuelve true si pudo hacer la consulta (independientemente de si hay
+ * sockets abiertos o no).
+ */
+bool CellularPrintSocketState(void)
+{
+    char response[256];
+
+    printf("\n========== QISTATE (sockets activos) ==========\n");
+
+    bool ok = CellularSendCommand(
+        "AT+QISTATE?\r\n",
+        response,
+        sizeof(response),
+        5000
+    );
+
+    if (!ok)
+    {
+        printf("No se pudo consultar QISTATE.\n");
+        return false;
+    }
+
+    if (strstr(response, "+QISTATE:") == NULL)
+    {
+        printf("No hay sockets abiertos.\n");
+    }
+    else
+    {
+        printf("%s\n", response);
+    }
+
+    return true;
+}
+
+
+/**
+ * Cierra (best-effort) todos los connectID posibles (0..11 en el EG915U-LA).
+ * Se ignoran errores individuales: es normal que la mayoría no estén
+ * abiertos y el módulo responda ERROR para esos casos.
+ */
+void CellularCloseAllSockets(void)
+{
+    char command[32];
+    char response[128];
+
+    printf("\n========== Cerrando sockets (barrido QICLOSE) ==========\n");
+
+    for (int id = 0; id <= 11; id++)
+    {
+        snprintf(command, sizeof(command), "AT+QICLOSE=%d\r\n", id);
+        CellularSendCommand(command, response, sizeof(response), 2000);
+    }
+}
 
 /////////////////////////////////////
 bool CellularInit(void)
