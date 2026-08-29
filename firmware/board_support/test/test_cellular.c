@@ -10,14 +10,54 @@
 
 #include <stdio.h>
 
+ 
+/*
+ * ============================================================================
+ * CONVENCION DE ESTADO ENTRE TESTS
+ * ============================================================================
+ * Estos tests se corren de a UNO por tag, manualmente, vía unity_run_tests_by_tag
+ * en test_app.c. No son independientes entre sí: cada uno asume que el módulo
+ * quedó en el estado que dejó el test anterior DENTRO DE LA MISMA SESIÓN DE
+ * ENERGÍA (mismo power-on, sin resets del MCU ni del módulo).
+ *
+ * Orden de estado acumulado:
+ *   01 poweron         -> módulo encendido y RDY
+ *   02 at              -> responde a comandos AT
+ *   03 echo            -> echo desactivado
+ *   04 full            -> función completa activada
+ *   05 imsi            -> (no cambia estado, solo lectura)
+ *   06 network         -> registrado en red
+ *   07 cereg           -> (solo lectura)
+ *   08 csq             -> (solo lectura)
+ *   09 cops            -> (solo lectura, requiere red registrada)
+ *   10 pdp             -> PDP configurado
+ *   11 act-pdp         -> PDP activado
+ *   12 pdp-status      -> (solo lectura, requiere PDP activo)
+ *   13 tcp             -> abre y cierra un socket (requiere PDP activo)
+ *   14 socket          -> diagnóstico de sockets vía túnel manual
+ *   15 sendrecv        -> TCP send/recv usando AT crudo (bajo nivel)
+ *   16 sendrecv_       -> ídem, esperando URC explícito (bajo nivel)
+ *   17 send_           -> TCP send usando API del BSP (alto nivel)
+ *   18 receivetcp_     -> TCP send+recv usando API del BSP (alto nivel)
+ *   19 power-off       -> apaga el módulo (fin de sesión de trabajo)
+ *
+ * Si arrancás una sesión nueva (después de correr [power-off] o de un reset
+ * del MCU/módulo), corré [poweron] antes de cualquier tag > 01. Las líneas
+ * de setup que aparecen comentadas en los tests intermedios son justamente
+ * eso: asumen que ya corriste el/los test(s) anteriores en esta sesión.
+ *
+ * IMPORTANTE: el apagado del módulo (GPIOOff) sólo debe ocurrir en el test
+ * de [power-off]. Ningún otro test debe apagar el módulo por su cuenta.
+ * ============================================================================
+ */
+
+/* ============================================================================
+ * 01 - Encendido e inicialización
+ * ========================================================================= */
 
 
 
-
-TEST_CASE(
-    "TEST-BSP-CELLULAR-04 Power on module and wait RDY",
-    "[bsp][cellular][poweron][ready]"
-)
+TEST_CASE("TEST-BSP-CELLULAR-01 Power on module and wait RDY","[bsp][cellular][poweron][ready]")
 {
     printf("\n========================================\n");
     printf(" CELLULAR POWER ON + RDY TEST\n");
@@ -45,7 +85,12 @@ TEST_CASE(
 }
 
 
-TEST_CASE("TEST-BSP-CELLULAR-06 AT command ready", "[bsp][cellular][at]")
+/* ============================================================================
+ * 02 - Comandos AT básicos
+ * ========================================================================= */
+
+
+TEST_CASE("TEST-BSP-CELLULAR-02 AT command ready", "[bsp][cellular][at]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -61,7 +106,12 @@ TEST_CASE("TEST-BSP-CELLULAR-06 AT command ready", "[bsp][cellular][at]")
     }
 }
 
-TEST_CASE("TEST-BSP-CELLULAR-07 Echo off", "[bsp][cellular][echo]")
+/* ============================================================================
+ * 03 - Echo off
+ * ========================================================================= */
+
+
+TEST_CASE("TEST-BSP-CELLULAR-03 Echo off", "[bsp][cellular][echo]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -77,10 +127,17 @@ TEST_CASE("TEST-BSP-CELLULAR-07 Echo off", "[bsp][cellular][echo]")
     }
 }
 
-TEST_CASE("TEST-BSP-CELLULAR-07 Echo off", "[bsp][cellular][full]")
+/* ============================================================================
+ * 04 - Función completa
+ * (antes duplicaba el nombre de 03 "Echo off" por error de copy-paste)
+ * ========================================================================= */
+
+
+TEST_CASE("TEST-BSP-CELLULAR-04 Set full function", "[bsp][cellular][full]")
 {
     UartHalInit(UART_BAUDRATE);
-
+    //TEST_ASSERT_TRUE_MESSAGE(CellularPowerOn(),"No se pudo encender el módulo");
+    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
 
     bool full_on = CellularSetFullFunction();
     TEST_ASSERT_TRUE_MESSAGE( full_on, "El módulo no respondió OK al comando full");
@@ -90,7 +147,12 @@ TEST_CASE("TEST-BSP-CELLULAR-07 Echo off", "[bsp][cellular][full]")
     }
 }
 
-TEST_CASE("TEST-BSP-CELLULAR-09 IMSI read", "[bsp][cellular][imsi]")
+
+/* ============================================================================
+ * 05 - IMSI
+ * ========================================================================= */
+
+TEST_CASE("TEST-BSP-CELLULAR-05 IMSI read", "[bsp][cellular][imsi]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -104,8 +166,12 @@ TEST_CASE("TEST-BSP-CELLULAR-09 IMSI read", "[bsp][cellular][imsi]")
     }
 }
 
+/* ============================================================================
+ * 06 - Registro de red
+ * ========================================================================= */
 
-TEST_CASE("TEST-BSP-CELLULAR-10 Network registration", "[bsp][cellular][network]")
+
+TEST_CASE("TEST-BSP-CELLULAR-6 Network registration", "[bsp][cellular][network]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -121,7 +187,12 @@ TEST_CASE("TEST-BSP-CELLULAR-10 Network registration", "[bsp][cellular][network]
 }
 
 
-TEST_CASE("TEST-BSP-CELLULAR-11 Network registration status", "[bsp][cellular][cereg]")
+/* ============================================================================
+ * 07 - Estado de registro (CEREG)
+ * ========================================================================= */
+
+
+TEST_CASE("TEST-BSP-CELLULAR-7 Network registration status", "[bsp][cellular][cereg]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -139,7 +210,13 @@ TEST_CASE("TEST-BSP-CELLULAR-11 Network registration status", "[bsp][cellular][c
 }
 
 
-TEST_CASE("TEST-BSP-CELLULAR-13 Signal quality", "[bsp][cellular][csq]")
+/* ============================================================================
+ * 08 - Calidad de señal (CSQ)
+ * ========================================================================= */
+ 
+
+
+TEST_CASE("TEST-BSP-CELLULAR-8 Signal quality", "[bsp][cellular][csq]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -153,7 +230,12 @@ TEST_CASE("TEST-BSP-CELLULAR-13 Signal quality", "[bsp][cellular][csq]")
     }
 }
 
-TEST_CASE("TEST-BSP-CELLULAR-14 Operator name", "[bsp][cellular][cops]")
+
+/* ============================================================================
+ * 09 - Nombre de operador (COPS)
+ * ========================================================================= */
+
+TEST_CASE("TEST-BSP-CELLULAR-9 Operator name", "[bsp][cellular][cops]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -174,7 +256,11 @@ TEST_CASE("TEST-BSP-CELLULAR-14 Operator name", "[bsp][cellular][cops]")
 }
 
 
-TEST_CASE("TEST-BSP-CELLULAR-15 Configure PDP context", "[bsp][cellular][pdp]")
+/* ============================================================================
+ * 10 - Configurar PDP context
+ * ========================================================================= */
+
+TEST_CASE("TEST-BSP-CELLULAR-10 Configure PDP context", "[bsp][cellular][pdp]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -195,34 +281,33 @@ TEST_CASE("TEST-BSP-CELLULAR-15 Configure PDP context", "[bsp][cellular][pdp]")
     }
 }
 
+/* ============================================================================
+ * 11 - Activar PDP context
+ * (se retiró el GPIOOff que apagaba el módulo acá — ver test 19 [power-off])
+ * ========================================================================= */
 
-TEST_CASE("TEST-BSP-CELLULAR-16 Activate PDP context", "[bsp][cellular][act-pdp]")
+TEST_CASE("TEST-BSP-CELLULAR-11 Activate PDP context", "[bsp][cellular][act-pdp]")
 {
     UartHalInit(UART_BAUDRATE);
 
-    TEST_ASSERT_TRUE_MESSAGE( CellularPowerOn(), "No se pudo encender el módulo");
-
-    //printf("hola///////////gdfg///////.\n");
-    //GPIOOff(QUECTEL_PWRKEY_PIN);
-
-    TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
-    TEST_ASSERT_TRUE_MESSAGE( CellularWaitNetworkRegistration(120000),"No se registró en la red");
-    TEST_ASSERT_TRUE_MESSAGE(CellularConfigurePdp(CELLULAR_APN, CELLULAR_USERNAME, CELLULAR_PASSWORD),"No se pudo configurar PDP context");
+    //TEST_ASSERT_TRUE_MESSAGE( CellularPowerOn(), "No se pudo encender el módulo");
+    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
+    //TEST_ASSERT_TRUE_MESSAGE( CellularWaitNetworkRegistration(120000),"No se registró en la red");
+    //TEST_ASSERT_TRUE_MESSAGE(CellularConfigurePdp(CELLULAR_APN, CELLULAR_USERNAME, CELLULAR_PASSWORD),"No se pudo configurar PDP context");
 
     bool ok = CellularActivatePdp();
-    GPIOOff(QUECTEL_PWRKEY_PIN);
-
     TEST_ASSERT_TRUE_MESSAGE( ok, "No se pudo activar PDP context");
-
     if (ok) {
         printf("PDP context activado correctamente.\n");
     }
-  
 }
 
+/* ============================================================================
+ * 12 - Estado del PDP context e IP asignada
+ * ========================================================================= */
 
 TEST_CASE(
-    "TEST-BSP-CELLULAR-17 PDP status and IP",
+    "TEST-BSP-CELLULAR-12 PDP status and IP",
     "[bsp][cellular][pdp-status]"
 )
 {
@@ -266,14 +351,15 @@ TEST_CASE(
         "PDP activo. IP asignada: %s\n",
         ip_address
     );
-
-    //GPIOOff(QUECTEL_PWRKEY_PIN);
 }
 
+/* ============================================================================
+ * 13 - Diagnóstico de apertura/cierre de socket TCP (sin envío de datos)
+ * ========================================================================= */
 
 
 TEST_CASE(
-    "TEST-BSP-CELLULAR-18 QIOPEN diagnostic",
+    "TEST-BSP-CELLULAR-13 QIOPEN diagnostic",
     "[bsp][cellular][tcp]"
 )
 {
@@ -298,8 +384,6 @@ TEST_CASE(
     CellularPrintSocketState();
 
     const int socket_id = 0;
-        //CellularOpenTcp(socket_id, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
-
     TEST_ASSERT_TRUE_MESSAGE(
         CellularOpenSocket(socket_id, "TCP", CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
         "No se pudo abrir la conexion TCP"
@@ -308,43 +392,22 @@ TEST_CASE(
 
     TEST_ASSERT_TRUE_MESSAGE(
         CellularCloseSocket(socket_id),
-        //CellularCloseTcp(socket_id),
         "No se pudo cerrar el socket TCP"
     );
     printf("TCP cerrado correctamente.\n");
 }
 
 
+/* ============================================================================
+ * 14 - Diagnóstico de múltiples sockets vía túnel manual
+ * NOTA MANUAL: requiere un túnel pinggy-free (u otro) activo y accesible.
+ * Estos túneles gratuitos expiran cada pocas horas — si este test falla,
+ * verificar primero si el túnel sigue vivo antes de sospechar del código.
+ * ========================================================================= */
 
 
-TEST_CASE(
-    "TEST-BSP-CELLULAR-19 Power off module",
-    "[bsp][cellular][power-off]"
-)
-{
-    UartHalInit(UART_BAUDRATE);
 
-    printf("\n========== POWER OFF TEST ==========\n");
-    printf("Apagando el modulo celular...\n");
-
-    bool ok = CellularPowerOff();
-
-    TEST_ASSERT_TRUE_MESSAGE(
-        ok,
-        "No se pudo apagar el modulo (ni por software ni por hardware)"
-    );
-
-    printf("\nModulo apagado.\n");
-    printf(
-        "NOTA: sin pin STATUS conectado, no se puede confirmar "
-        "el apagado por software. Verificar manualmente si el "
-        "modulo respondio con OK+POWERED DOWN o si se uso el "
-        "failsafe por hardware, revisando el log de "
-        "CellularPowerOff.\n"
-    );
-}
-
-TEST_CASE("TEST-BSP-CELLULAR-20 Socket open/close diagnostic", "[bsp][cellular][socket]")
+TEST_CASE("TEST-BSP-CELLULAR-14 Socket open/close diagnostic (multi)", "[bsp][cellular][socket]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -354,13 +417,12 @@ TEST_CASE("TEST-BSP-CELLULAR-20 Socket open/close diagnostic", "[bsp][cellular][
     //TEST_ASSERT_TRUE_MESSAGE(CellularConfigurePdp(CELLULAR_APN, CELLULAR_USERNAME, CELLULAR_PASSWORD), "No se pudo configurar PDP");
     //TEST_ASSERT_TRUE_MESSAGE(CellularActivatePdp(), "No se pudo activar PDP");
 
-    // Abrimos un socket TCP de prueba (ejemplo: google.com:80)
+    //Servidor de prueba manual,
     //ssh -p 443 -R0:localhost:8089 tcp@a.pinggy.io
     //nc -l -k -p 30000
 
-    //│  tcp://qextg-190-183-23-94.run.pinggy-free.link:34553           
-
-    TEST_ASSERT_TRUE_MESSAGE(CellularOpenSocket(0, "TCP", "tcp://qextg-190-183-23-94.run.pinggy-free.link", 34553), "No se pudo abrir socket");
+   // pruebo el slot 0
+    TEST_ASSERT_TRUE_MESSAGE(CellularOpenSocket(0, "TCP", CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT), "No se pudo abrir socket");
 
     // Consultamos sockets abiertos
     int sockets[10];
@@ -383,14 +445,17 @@ TEST_CASE("TEST-BSP-CELLULAR-20 Socket open/close diagnostic", "[bsp][cellular][
 
     // Verificamos que ya no haya sockets abiertos
     int m = CellularGetOpenSockets(sockets, 10);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, m, "Todavía hay sockets abiertos después de cerrar");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, m, "Todavía hay sockets abiertos despues de cerrar");
 }
 
 
-TEST_CASE(
-    "TEST-BSP-CELLULAR-21 TCP send/receive diagnostic",
-    "[bsp][cellular][tcp][sendrecv]"
-)
+/* ============================================================================
+ * BAJO NIVEL (AT crudo) — pruebas de las primitivas QISEND / QIRD / URC
+ * antes de confiar en ellas dentro de CellularSendTcp/CellularReceiveTcp.
+ * ========================================================================= */
+ 
+/* 15 - Send/receive por AT crudo (QISEND), lectura directa por UART */
+TEST_CASE("TEST-BSP-CELLULAR-15 TCP send/receive (raw AT)", "[bsp][cellular][tcp][sendrecv]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -436,6 +501,11 @@ TEST_CASE(
     );
     printf("TCP TX: %s\n", payload);
 
+    // NOTA: contra un echo server real (ej. tcpbin.com) se espera "HELLO" de vuelta.
+    // Contra el nc de prueba propio, ajustar el string esperado según lo que
+    // ese servidor responda.
+
+
     // Recibir eco del servidor
     char recv_buf[256];
     int len = UartHalReadBytes(recv_buf, sizeof(recv_buf)-1, 10000);
@@ -454,9 +524,9 @@ TEST_CASE(
     printf("TCP cerrado correctamente.\n");
 }
 
-
+/* 16 - Send/receive por AT crudo, esperando el URC de recepción explícitamente */
 TEST_CASE(
-    "TEST-BSP-CELLULAR-23 TCP send/receive with URC wait",
+    "TEST-BSP-CELLULAR-23 TCP send/receive with URC wait (raw AT)",
     "[bsp][cellular][tcp][sendrecv_]"
 )
 {
@@ -477,10 +547,7 @@ TEST_CASE(
     const int socket_id = 0;
     const char *payload = "HELLO\r\n";
 
-    // Abrir conexión TCP        //CellularOpenTcp(socket_id, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
-
     TEST_ASSERT_TRUE_MESSAGE(
-        
         CellularOpenSocket(socket_id, "TCP", CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
         "No se pudo abrir la conexión TCP"
     );
@@ -516,6 +583,8 @@ TEST_CASE(
     );
 
     printf("TCP RX: %s\n", response);
+
+    // Contra el nc de prueba propio configurado para responder "chau"
     TEST_ASSERT_TRUE_MESSAGE(strstr(response, "chau") != NULL, "El eco no contiene 'chau'");
 
     // Cerrar socket
@@ -527,8 +596,16 @@ TEST_CASE(
     printf("TCP cerrado correctamente.\n");
 }
 
+
+/* ============================================================================
+ * ALTO NIVEL (API del BSP) — una vez validadas las primitivas AT arriba,
+ * se prueba la API pública que las envuelve.
+ * ========================================================================= */
+ 
+/* 17 - Send únicamente, vía API de alto nivel */
+
 TEST_CASE(
-    "TEST-BSP-CELLULAR-24 TCP send",
+    "TEST-BSP-CELLULAR-17 TCP send (API)",
     "[bsp][cellular][tcp][send_]"
 )
 {
@@ -582,8 +659,15 @@ TEST_CASE(
     );
 }
 
+/* 18 - Send + receive, vía API de alto nivel
+ * (incluye todo lo que cubre el test 17, por eso ese no hace falta correrlo
+ * aparte una vez que este pasa — se deja igual para poder aislar el envío
+ * si algún día falla sólo la recepción)
+ */
+
+
 TEST_CASE(
-    "TEST-BSP-CELLULAR-25 TCP send and receive",
+    "TEST-BSP-CELLULAR-18 TCP send and receive (API)",
     "[bsp][cellular][tcp][receivetcp_]"
 )
 {
@@ -616,10 +700,6 @@ TEST_CASE(
     const int socket_id = 0;
     const char *payload = "HELLO\r\n";
 
-    /*
-     * Abrir TCP
-     */
-            //CellularOpenTcp(socket_id, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
 
     TEST_ASSERT_TRUE_MESSAGE(
         CellularOpenSocket(socket_id, "TCP", CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
@@ -630,9 +710,7 @@ TEST_CASE(
         "\nTCP conectado correctamente.\n"
     );
 
-    /*
-     * Enviar TCP mediante BSP
-     */
+
     TEST_ASSERT_TRUE_MESSAGE(
         CellularSendTcp(
             socket_id,
@@ -647,9 +725,7 @@ TEST_CASE(
         payload
     );
 
-    /*
-     * Recibir TCP mediante BSP
-     */
+ 
     char response[256];
 
     TEST_ASSERT_TRUE_MESSAGE(
@@ -666,17 +742,13 @@ TEST_CASE(
         response
     );
 
-    /*
-     * Comprobar respuesta del servidor
-     */
+
     TEST_ASSERT_TRUE_MESSAGE(
         strstr(response, "chau") != NULL,
         "La respuesta TCP no contiene 'chau'"
     );
 
-    /*
-     * Cerrar TCP
-     */
+ 
     TEST_ASSERT_TRUE_MESSAGE(
         CellularCloseSocket(socket_id),
         //CellularCloseTcp(socket_id),
@@ -687,3 +759,31 @@ TEST_CASE(
         "TCP cerrado correctamente.\n"
     );
 }
+
+
+/* ============================================================================
+ * 19 - Apagado del módulo (fin de sesión de trabajo)
+ * Este es el ÚNICO lugar donde el módulo debe apagarse.
+ * ========================================================================= */
+ 
+TEST_CASE("TEST-BSP-CELLULAR-19 Power off module", "[bsp][cellular][power-off]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+    printf("\n========== POWER OFF TEST ==========\n");
+    printf("Apagando el modulo celular...\n");
+
+    bool ok = CellularPowerOff();
+
+    TEST_ASSERT_TRUE_MESSAGE(ok, "No se pudo apagar el modulo (ni por software ni por hardware)");
+
+    printf("\nModulo apagado.\n");
+    printf(
+        "NOTA: sin pin STATUS conectado, no se puede confirmar "
+        "el apagado por software. Verificar manualmente si el "
+        "modulo respondio con OK+POWERED DOWN o si se uso el "
+        "failsafe por hardware, revisando el log de "
+        "CellularPowerOff.\n"
+    );
+}
+
