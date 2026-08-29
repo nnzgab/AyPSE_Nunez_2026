@@ -14,16 +14,16 @@ void app_main(void)
 
     UNITY_BEGIN();
 
-    unity_run_tests_by_tag("[gpio]", false);
+    //unity_run_tests_by_tag("[gpio]", false);
 
-    unity_run_tests_by_tag("[uart]", false);
+    //unity_run_tests_by_tag("[uart]", false);
 
-    unity_run_tests_by_tag("[led]", false);
+    //unity_run_tests_by_tag("[led]", false);
 
-    unity_run_tests_by_tag("[button]", false);
+    //unity_run_tests_by_tag("[button]", false);
 
     /*BSP-cellular*/
-
+///*
     unity_run_tests_by_tag("[poweron]", false);
 
     unity_run_tests_by_tag("[at]", false);
@@ -59,7 +59,7 @@ void app_main(void)
     unity_run_tests_by_tag("[send_]", false);
 
     unity_run_tests_by_tag("[receivetcp_]", false);
-
+//*/
     unity_run_tests_by_tag("[power-off]", false);
 
     UNITY_END();

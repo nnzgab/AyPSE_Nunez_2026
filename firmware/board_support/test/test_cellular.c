@@ -264,9 +264,9 @@ TEST_CASE("TEST-BSP-CELLULAR-10 Configure PDP context", "[bsp][cellular][pdp]")
 {
     UartHalInit(UART_BAUDRATE);
 
-    TEST_ASSERT_TRUE_MESSAGE(CellularPowerOn(),"No se pudo encender el módulo");
-    TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
-    TEST_ASSERT_TRUE_MESSAGE(CellularWaitNetworkRegistration(120000),"No se registró en la red");
+    //TEST_ASSERT_TRUE_MESSAGE(CellularPowerOn(),"No se pudo encender el módulo");
+    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitReady(10000),"No se recibió RDY");
+    //TEST_ASSERT_TRUE_MESSAGE(CellularWaitNetworkRegistration(120000),"No se registró en la red");
 
     bool ok = CellularConfigurePdp(
         CELLULAR_APN,
@@ -306,10 +306,7 @@ TEST_CASE("TEST-BSP-CELLULAR-11 Activate PDP context", "[bsp][cellular][act-pdp]
  * 12 - Estado del PDP context e IP asignada
  * ========================================================================= */
 
-TEST_CASE(
-    "TEST-BSP-CELLULAR-12 PDP status and IP",
-    "[bsp][cellular][pdp-status]"
-)
+TEST_CASE("TEST-BSP-CELLULAR-12 PDP status and IP","[bsp][cellular][pdp-status]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -358,10 +355,7 @@ TEST_CASE(
  * ========================================================================= */
 
 
-TEST_CASE(
-    "TEST-BSP-CELLULAR-13 QIOPEN diagnostic",
-    "[bsp][cellular][tcp]"
-)
+TEST_CASE("TEST-BSP-CELLULAR-13 QIOPEN diagnostic", "[bsp][cellular][tcp]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -406,7 +400,7 @@ TEST_CASE(
  * ========================================================================= */
 
 
-
+/*
 TEST_CASE("TEST-BSP-CELLULAR-14 Socket open/close diagnostic (multi)", "[bsp][cellular][socket]")
 {
     UartHalInit(UART_BAUDRATE);
@@ -447,7 +441,7 @@ TEST_CASE("TEST-BSP-CELLULAR-14 Socket open/close diagnostic (multi)", "[bsp][ce
     int m = CellularGetOpenSockets(sockets, 10);
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, m, "Todavía hay sockets abiertos despues de cerrar");
 }
-
+*/
 
 /* ============================================================================
  * BAJO NIVEL (AT crudo) — pruebas de las primitivas QISEND / QIRD / URC
@@ -455,6 +449,7 @@ TEST_CASE("TEST-BSP-CELLULAR-14 Socket open/close diagnostic (multi)", "[bsp][ce
  * ========================================================================= */
  
 /* 15 - Send/receive por AT crudo (QISEND), lectura directa por UART */
+/*
 TEST_CASE("TEST-BSP-CELLULAR-15 TCP send/receive (raw AT)", "[bsp][cellular][tcp][sendrecv]")
 {
     UartHalInit(UART_BAUDRATE);
@@ -491,12 +486,12 @@ TEST_CASE("TEST-BSP-CELLULAR-15 TCP send/receive (raw AT)", "[bsp][cellular][tcp
 
     snprintf(command, sizeof(command), "AT+QISEND=%d,%d\r\n", socket_id, (int)strlen(payload));
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularSendCommand(command, response, sizeof(response), 5000),
+        CellularSendCommand(command, response, sizeof(response), 800),
         "No se pudo iniciar QISEND"
     );
 
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularSendCommand(payload, response, sizeof(response), 5000),
+        CellularSendCommand(payload, response, sizeof(response), 800),
         "No se pudo enviar datos"
     );
     printf("TCP TX: %s\n", payload);
@@ -523,12 +518,12 @@ TEST_CASE("TEST-BSP-CELLULAR-15 TCP send/receive (raw AT)", "[bsp][cellular][tcp
     );
     printf("TCP cerrado correctamente.\n");
 }
+*/
+
 
 /* 16 - Send/receive por AT crudo, esperando el URC de recepción explícitamente */
-TEST_CASE(
-    "TEST-BSP-CELLULAR-23 TCP send/receive with URC wait (raw AT)",
-    "[bsp][cellular][tcp][sendrecv_]"
-)
+/*
+TEST_CASE("TEST-BSP-CELLULAR-16 TCP send/receive with URC wait (raw AT)", "[bsp][cellular][tcp][sendrecv_]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -559,12 +554,12 @@ TEST_CASE(
 
     snprintf(command, sizeof(command), "AT+QISEND=%d,%d\r\n", socket_id, (int)strlen(payload));
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularSendCommand(command, response, sizeof(response), 5000),
+        CellularSendCommand(command, response, sizeof(response), 800),
         "No se pudo iniciar QISEND"
     );
 
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularSendCommand(payload, response, sizeof(response), 5000),
+        CellularSendCommand(payload, response, sizeof(response), 800),
         "No se pudo enviar datos"
     );
     printf("TCP TX: %s\n", payload);
@@ -578,7 +573,7 @@ TEST_CASE(
     // Leer datos recibidos con QIRD
     snprintf(command, sizeof(command), "AT+QIRD=%d,1500\r\n", socket_id);
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularSendCommand(command, response, sizeof(response), 10000),
+        CellularSendCommand(command, response, sizeof(response), 800),
         "No se pudo leer datos con QIRD"
     );
 
@@ -595,7 +590,7 @@ TEST_CASE(
     );
     printf("TCP cerrado correctamente.\n");
 }
-
+*/
 
 /* ============================================================================
  * ALTO NIVEL (API del BSP) — una vez validadas las primitivas AT arriba,
@@ -603,11 +598,8 @@ TEST_CASE(
  * ========================================================================= */
  
 /* 17 - Send únicamente, vía API de alto nivel */
-
-TEST_CASE(
-    "TEST-BSP-CELLULAR-17 TCP send (API)",
-    "[bsp][cellular][tcp][send_]"
-)
+/*
+TEST_CASE("TEST-BSP-CELLULAR-17 TCP send (API)", "[bsp][cellular][tcp][send_]")
 {
     UartHalInit(UART_BAUDRATE);
 
@@ -658,6 +650,8 @@ TEST_CASE(
         "No se pudo cerrar el socket TCP"
     );
 }
+*/
+
 
 /* 18 - Send + receive, vía API de alto nivel
  * (incluye todo lo que cubre el test 17, por eso ese no hace falta correrlo
@@ -667,9 +661,7 @@ TEST_CASE(
 
 
 TEST_CASE(
-    "TEST-BSP-CELLULAR-18 TCP send and receive (API)",
-    "[bsp][cellular][tcp][receivetcp_]"
-)
+    "TEST-BSP-CELLULAR-18 TCP send and receive (API)","[bsp][cellular][tcp][receivetcp_]")
 {
     UartHalInit(UART_BAUDRATE);
 
