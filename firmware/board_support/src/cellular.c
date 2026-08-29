@@ -1327,6 +1327,97 @@ bool CellularCloseSocket(int socket_id)
 
 
 
+bool CellularSendTcp(
+    int socket_id,
+    const char *data,
+    size_t length
+)
+{
+    char command[64];
+    char response[128];
+
+    if (data == NULL || length == 0)
+    {
+        printf("CELLULAR: Invalid TCP data\n");
+        return false;
+    }
+
+    snprintf(
+        command,
+        sizeof(command),
+        "AT+QISEND=%d,%d\r\n",
+        socket_id,
+        (int)length
+    );
+
+    printf(
+        "CELLULAR: Sending %zu bytes on TCP socket %d\n",
+        length,
+        socket_id
+    );
+
+    /*
+     * 1. Solicitar al módem el envío de datos.
+     */
+    if (!CellularSendCommand(
+            command,
+            response,
+            sizeof(response),
+            CELLULAR_TCP_COMMAND_TIMEOUT_MS))
+    {
+        printf(
+            "CELLULAR: QISEND command failed\n"
+        );
+
+        return false;
+    }
+
+    /*
+     * 2. El módem debe responder con el prompt '>'.
+     */
+    if (strstr(response, ">") == NULL)
+    {
+        printf(
+            "CELLULAR: QISEND prompt not received\n"
+        );
+
+        return false;
+    }
+
+    /*
+     * 3. Enviar los datos propiamente dichos.
+     */
+    if (!CellularSendCommand(
+            data,
+            response,
+            sizeof(response),
+            CELLULAR_TCP_COMMAND_TIMEOUT_MS))
+    {
+        printf(
+            "CELLULAR: TCP data transmission failed\n"
+        );
+
+        return false;
+    }
+
+    /*
+     * 4. El módem debe confirmar el envío.
+     */
+    if (strstr(response, "SEND OK") == NULL)
+    {
+        printf(
+            "CELLULAR: TCP send rejected\n"
+        );
+
+        return false;
+    }
+
+    printf(
+        "CELLULAR: TCP data sent successfully\n"
+    );
+
+    return true;
+}
 
 
 

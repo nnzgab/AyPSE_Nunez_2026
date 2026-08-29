@@ -136,4 +136,9 @@ bool CellularTcpDisconnect(void);
 /* SMS */
 bool CellularSmsSend(const char *number, const char *message);
 
+
+
+bool CellularSendTcp(int socket_id, const char *data, size_t length);
+bool CellularReceiveTcp(int socket_id, char *data, size_t data_size);
+
 #endif /* CELLULAR_H */
