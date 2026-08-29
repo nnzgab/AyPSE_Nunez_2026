@@ -12,8 +12,19 @@
 //#define CELLULAR_TCP_TEST_SERVER "54.175.103.105" //"tcpbin.com"
 //#define CELLULAR_TCP_TEST_PORT   30000 //4242
 
-#define CELLULAR_TCP_TEST_SERVER "tcpbin.com"
-#define CELLULAR_TCP_TEST_PORT   4242
+//#define CELLULAR_TCP_TEST_SERVER "tcpbin.com"
+//#define CELLULAR_TCP_TEST_PORT   4242
+
+
+#define CELLULAR_TCP_TEST_SERVER "kvvye-190-183-23-94.run.pinggy-free.link"
+#define CELLULAR_TCP_TEST_PORT   40485
+//tcp://qextg-190-183-23-94.run.pinggy-free.link:34553       
+
+#define CELLULAR_AT_TIMEOUT_MS        1000   // comandos básicos
+#define CELLULAR_QICSGP_TIMEOUT_MS    2000   // configuración PDP
+#define CELLULAR_QIACT_TIMEOUT_MS     30000  // activación PDP
+#define CELLULAR_QIOPEN_TIMEOUT_MS    60000  // apertura de socket
+#define CELLULAR_QICLOSE_TIMEOUT_MS   2000   // cierre de socket
 
 
 
@@ -70,6 +81,26 @@ bool CellularWaitForResponse(
 bool CellularPrintSocketState(void);
 void CellularCloseAllSockets(void);
 
+int CellularGetOpenSockets(int *sockets, int max_sockets);
+
+bool CellularOpenSocket(
+    int socket_id,
+    const char *type,   // "TCP" o "UDP"
+    const char *host,
+    int port
+);
+
+/*
+Tu función CellularOpenTcp() puede ser simplemente un wrapper que llama a la genérica:
+c
+
+bool CellularOpenTcp(int socket_id, const char *server, int port)
+{
+    return CellularOpenSocket(socket_id, "TCP", server, port);
+
+*/
+
+bool CellularCloseSocket(int socket_id);
 
 
 bool CellularIsReady(void);

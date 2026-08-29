@@ -26,12 +26,20 @@
 
 #define CELLULAR_NETWORK_POLL_MS       1000
 #define CELLULAR_NETWORK_TIMEOUT_MS    120000
-#define CELLULAR_QIACT_TIMEOUT_MS    160000
+//#define CELLULAR_QIACT_TIMEOUT_MS    160000
 
 #define CELLULAR_QIOPEN_COMMAND_TIMEOUT_MS    5000
 #define CELLULAR_QIOPEN_RESULT_TIMEOUT_MS    30000
 
 #define CELLULAR_TCP_COMMAND_TIMEOUT_MS 5000
+
+#define CELLULAR_PWRKEY_POWEROFF_PULSE_MS 3000
+
+#define CELLULAR_QPOWD_TIMEOUT_MS 20000
+
+
+
+
 
 
 
@@ -1131,6 +1139,202 @@ void CellularCloseAllSockets(void)
     }
 }
 
+
+
+
+int CellularGetOpenSockets(int *sockets, int max_sockets)
+{
+    char response[512];
+
+    if (!CellularSendCommand("AT+QISTATE=0\r\n",
+                              response,
+                              sizeof(response),
+                              CELLULAR_AT_TIMEOUT_MS))
+    {
+        printf("CELLULAR: QISTATE command failed\n");
+        return -1;
+    }
+
+    // Si el módem respondió ERROR, la consulta en sí falló:
+    // no es lo mismo que "0 sockets abiertos".
+    if (strstr(response, "ERROR") != NULL)
+    {
+        printf("CELLULAR: QISTATE returned ERROR: %s\n", response);
+        return -1;
+    }
+
+    /*
+     * Ejemplo de respuesta:
+     * +QISTATE: 0,0,"TCP","example.com",80,1,1,0,0,0
+     * +QISTATE: 1,0,"UDP","example.com",1234,1,1,0,0,0
+     * OK
+     */
+
+    int count = 0;
+    char *line = strtok(response, "\r\n");
+    while (line != NULL && count < max_sockets)
+    {
+        if (strstr(line, "+QISTATE:") != NULL)
+        {
+            int id;
+            if (sscanf(line, "+QISTATE: %d,", &id) == 1)
+            {
+                sockets[count++] = id;
+            }
+        }
+        line = strtok(NULL, "\r\n");
+    }
+
+    printf("CELLULAR: %d sockets abiertos\n", count);
+    return count;
+}
+
+// ---------------------------------------------------------------------
+// Defines
+// ---------------------------------------------------------------------
+
+// Timeout para que el módem devuelva OK + el URC +QIOPEN.
+// QIOPEN puede tardar varios segundos en TCP real (resolución DNS +
+// handshake), así que va bastante más holgado que un AT command común.
+//#define CELLULAR_QIOPEN_TIMEOUT_MS      (10000u)
+
+// Tamaño de buffer de respuesta para QIOPEN: tiene que entrar
+// "\r\nOK\r\n+QIOPEN: <id>,<err>\r\n" y algo de margen.
+#define CELLULAR_QIOPEN_RESPONSE_SIZE   (256u)
+
+// Longitud máxima del comando AT+QIOPEN formateado
+#define CELLULAR_QIOPEN_COMMAND_SIZE    (256u)
+
+// Código de éxito del URC +QIOPEN
+#define CELLULAR_QIOPEN_ERR_SUCCESS     (0)
+
+// ---------------------------------------------------------------------
+// Implementación
+// ---------------------------------------------------------------------
+
+bool CellularOpenSocket(
+    int socket_id,
+    const char *type,   // "TCP" o "UDP"
+    const char *host,
+    int port
+)
+{
+    char command[CELLULAR_QIOPEN_COMMAND_SIZE];
+    char response[CELLULAR_QIOPEN_RESPONSE_SIZE];
+
+    if (type == NULL || host == NULL || port <= 0) {
+        printf("CELLULAR: QIOPEN invalid arguments\n");
+        return false;
+    }
+
+    snprintf(
+        command,
+        sizeof(command),
+        "AT+QIOPEN=1,%d,\"%s\",\"%s\",%d,0,1\r\n",
+        socket_id,
+        type,
+        host,
+        port
+    );
+
+    if (!CellularSendCommand(
+            command,
+            response,
+            sizeof(response),
+            CELLULAR_QIOPEN_TIMEOUT_MS))
+    {
+        printf("CELLULAR: QIOPEN command failed (no response)\n");
+        return false;
+    }
+
+    if (strstr(response, "OK") == NULL) {
+        printf("CELLULAR: Socket %d open failed (no OK): %s\n",
+               socket_id, response);
+        return false;
+    }
+
+    // El "OK" solo confirma que el comando fue aceptado.
+    // El resultado real de la apertura llega como URC asíncrono:
+    //   +QIOPEN: <connectID>,<err>
+    // err == 0 significa éxito; cualquier otro valor es un código
+    // de error del módem (p.ej. 563 = fallo de conexión TCP).
+    char *urc = strstr(response, "+QIOPEN:");
+    if (urc == NULL) {
+        printf("CELLULAR: Socket %d open failed (no +QIOPEN URC): %s\n",
+               socket_id, response);
+        return false;
+    }
+
+    int connect_id = -1;
+    int err = -1;
+
+    if (sscanf(urc, "+QIOPEN: %d,%d", &connect_id, &err) != 2) {
+        printf("CELLULAR: Socket %d open failed (URC parse error): %s\n",
+               socket_id, urc);
+        return false;
+    }
+
+    if (connect_id != socket_id) {
+        printf("CELLULAR: Socket open mismatch: pedido %d, URC reporta %d\n",
+               socket_id, connect_id);
+        return false;
+    }
+
+    if (err != CELLULAR_QIOPEN_ERR_SUCCESS) {
+        printf("CELLULAR: Socket %d open failed, QIOPEN err=%d\n",
+               socket_id, err);
+        return false;
+    }
+
+    printf("CELLULAR: Socket %d opened (%s %s:%d)\n",
+           socket_id, type, host, port);
+
+    return true;
+}
+
+
+bool CellularCloseSocket(int socket_id)
+{
+    char command[64];
+    char response[128];
+
+    snprintf(
+        command,
+        sizeof(command),
+        "AT+QICLOSE=%d\r\n",
+        socket_id
+    );
+
+    if (!CellularSendCommand(
+            command,
+            response,
+            sizeof(response),
+            CELLULAR_AT_TIMEOUT_MS))
+    {
+        printf("CELLULAR: QICLOSE command failed\n");
+        return false;
+    }
+
+    if (strstr(response, "OK") == NULL)
+    {
+        printf("CELLULAR: Failed to close socket %d\n", socket_id);
+        return false;
+    }
+
+    printf("CELLULAR: Socket %d closed\n", socket_id);
+    return true;
+}
+
+
+
+
+
+
+
+
+
+
+
 /////////////////////////////////////
 bool CellularInit(void)
 {
@@ -1169,6 +1373,7 @@ bool CellularReset(void) {
 
 
 // Apagado lógico recomendado
+/*
 bool CellularPowerOff(void) {
     UartHalWriteBytes("AT+QPOWD=1\r\n", strlen("AT+QPOWD=1\r\n"));
     char response[64];
@@ -1178,6 +1383,48 @@ bool CellularPowerOff(void) {
         return strstr(response, "POWER DOWN") != NULL;
     }
     return false;
+}
+    */
+bool CellularPowerOff(void)
+{
+    char response[128];
+
+    printf("CELLULAR: Intentando apagado por software (AT+QPOWD=1)...\n");
+
+    /*
+     * Método A (preferido): apagado por software.
+     * Timeout generoso porque el módulo hace desregistro de red,
+     * cierre de sesiones PDP y guardado en flash antes de cortar.
+     */
+    if (CellularSendCommand(
+            "AT+QPOWD=1\r\n",
+            response,
+            sizeof(response),
+            CELLULAR_QPOWD_TIMEOUT_MS))  // ej. 20000
+    {
+        if (strstr(response, "POWERED DOWN") != NULL)
+        {
+            printf("CELLULAR: Apagado por software confirmado.\n");
+            return true;
+        }
+    }
+
+    printf("CELLULAR: Apagado por software fallo o sin confirmacion. "
+           "Intentando failsafe por hardware...\n");
+
+    /*
+     * Método B (failsafe): pulso de PWRKEY >= 3s, según el manual,
+     * para el caso de que la UART no responda o el módulo esté colgado.
+     */
+    GPIOOn(QUECTEL_PWRKEY_PIN);
+    vTaskDelay(pdMS_TO_TICKS(CELLULAR_PWRKEY_POWEROFF_PULSE_MS)); // >= 3000 ms
+    GPIOOff(QUECTEL_PWRKEY_PIN);
+
+    // Opcional: si tenés acceso al pin STATUS, confirmá acá que bajó a LOW
+    // en vez de asumir éxito ciegamente.
+
+    printf("CELLULAR: Pulso de apagado por hardware enviado.\n");
+    return true;
 }
 
 // Apagado físico (hard) - solo emergencia
