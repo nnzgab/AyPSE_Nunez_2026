@@ -298,15 +298,17 @@ TEST_CASE(
     CellularPrintSocketState();
 
     const int socket_id = 0;
+        //CellularOpenTcp(socket_id, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
 
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularOpenTcp(socket_id, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
+        CellularOpenSocket(socket_id, "TCP", CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
         "No se pudo abrir la conexion TCP"
     );
     printf("\nTCP conectado correctamente.\n");
 
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularCloseTcp(socket_id),
+        CellularCloseSocket(socket_id),
+        //CellularCloseTcp(socket_id),
         "No se pudo cerrar el socket TCP"
     );
     printf("TCP cerrado correctamente.\n");
@@ -409,8 +411,11 @@ TEST_CASE(
     const char *payload = "HELLO\r\n";
 
     // Abrir conexión TCP
+
+            //CellularOpenTcp(socket_id, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
+
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularOpenTcp(socket_id, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
+        CellularOpenSocket(socket_id, "TCP", CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
         "No se pudo abrir la conexión TCP"
     );
     printf("\nTCP conectado correctamente.\n");
@@ -442,7 +447,8 @@ TEST_CASE(
 
     // Cerrar socket
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularCloseTcp(socket_id),
+        CellularCloseSocket(socket_id),
+        //CellularCloseTcp(socket_id),
         "No se pudo cerrar el socket TCP"
     );
     printf("TCP cerrado correctamente.\n");
@@ -471,9 +477,11 @@ TEST_CASE(
     const int socket_id = 0;
     const char *payload = "HELLO\r\n";
 
-    // Abrir conexión TCP
+    // Abrir conexión TCP        //CellularOpenTcp(socket_id, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
+
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularOpenTcp(socket_id, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
+        
+        CellularOpenSocket(socket_id, "TCP", CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
         "No se pudo abrir la conexión TCP"
     );
     printf("\nTCP conectado correctamente.\n");
@@ -512,7 +520,8 @@ TEST_CASE(
 
     // Cerrar socket
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularCloseTcp(socket_id),
+        CellularCloseSocket(socket_id),
+        //CellularCloseTcp(socket_id),
         "No se pudo cerrar el socket TCP"
     );
     printf("TCP cerrado correctamente.\n");
@@ -546,15 +555,11 @@ TEST_CASE(
 
     const int socket_id = 0;
     const char *payload = "HELLO\r\n";
+        //CellularOpenTcp( socket_id, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
 
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularOpenTcp(
-            socket_id,
-            CELLULAR_TCP_TEST_SERVER,
-            CELLULAR_TCP_TEST_PORT
-        ),
-        "No se pudo abrir la conexión TCP"
-    );
+
+        CellularOpenSocket(socket_id, "TCP", CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),"No se pudo abrir la conexión TCP");
 
     TEST_ASSERT_TRUE_MESSAGE(
         CellularSendTcp(
@@ -571,7 +576,8 @@ TEST_CASE(
     );
 
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularCloseTcp(socket_id),
+        CellularCloseSocket(socket_id),
+        //CellularCloseTcp(socket_id),
         "No se pudo cerrar el socket TCP"
     );
 }
@@ -613,12 +619,10 @@ TEST_CASE(
     /*
      * Abrir TCP
      */
+            //CellularOpenTcp(socket_id, CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
+
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularOpenTcp(
-            socket_id,
-            CELLULAR_TCP_TEST_SERVER,
-            CELLULAR_TCP_TEST_PORT
-        ),
+        CellularOpenSocket(socket_id, "TCP", CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT),
         "No se pudo abrir la conexión TCP"
     );
 
@@ -674,7 +678,8 @@ TEST_CASE(
      * Cerrar TCP
      */
     TEST_ASSERT_TRUE_MESSAGE(
-        CellularCloseTcp(socket_id),
+        CellularCloseSocket(socket_id),
+        //CellularCloseTcp(socket_id),
         "No se pudo cerrar el socket TCP"
     );
 

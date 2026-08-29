@@ -70,11 +70,14 @@ bool EventFrameDispatch(const uint8_t *buffer, size_t length) {
     bool tcp_success = false;
 
     while (retries < MAX_TCP_RETRIES && !tcp_success) {
-        if (CellularTcpConnect(SERVER_HOST, SERVER_PORT)) {
-            if (CellularTcpSend(buffer, length)) {
+        //if (CellularTcpConnect(SERVER_HOST, SERVER_PORT)) {
+        if (CellularOpenSocket(0, "TCP", SERVER_HOST, SERVER_PORT)) {
+            //if (CellularTcpSend(buffer, length)) {
+            if (CellularSendTcp(0, (const char *)buffer, length)) {
                 tcp_success = true;
             }
-            CellularTcpDisconnect();
+            //CellularTcpDisconnect();
+            CellularCloseSocket(0);
         }
 
         if (!tcp_success) {

@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
+
+/* ================== Configuración ================== */
+
 #define CELLULAR_APN       "datos.personal.com"
 #define CELLULAR_USERNAME  "datos"
 #define CELLULAR_PASSWORD  "datos"
@@ -19,34 +22,36 @@
 #define CELLULAR_TCP_TEST_PORT   40437
    
 
-
-
-
-
 /*==================[external functions declaration]=========================*/
 
-/* Inicialización y estado */
-/* Servicios de Control y Red definidos para el módulo celular*/
-
-
+/* ================== Inicialización y estado ================== */
 
 bool CellularPowerOn(void);
-
 bool CellularWaitReady(uint32_t timeout_ms);
+bool CellularIsReady(void);
+bool CellularPowerOff(void);
+bool CellularPowerOffHard(void);
 
+
+/* ================== Configuración básica ================== */
 
 bool CellularEchoOff(void);
 bool CellularSetFullFunction(void);
 bool CellularGetIMSI(char *imsi, size_t imsi_size);
 
+
+/* ================== Registro en red ================== */
+
 bool CellularWaitNetworkRegistration(uint32_t timeout_ms);
 bool CellularGetNetworkRegistration(int *status);
-
 bool CellularGetSignalQuality(int *rssi);
 bool CellularGetOperator(char *operator_name, size_t operator_size);
+
+
+/* ================== PDP (Packet Data Protocol) ================== */
+
 bool CellularConfigurePdp(const char *apn,const char *username, const char *password);
 bool CellularActivatePdp(void);
-
 /*
 return false → no pude ejecutar/interpretar QIACT?
 return true  → pude consultar correctamente
@@ -56,81 +61,31 @@ active = false → no hay contexto activo
 */
 bool CellularGetPdpStatus( bool *active, char *ip_address, size_t ip_address_size);
 
-/*funcion para comportamiento asincronico*/
-bool CellularOpenTcp( int socket_id, const char *server, uint16_t port);
-bool CellularCloseTcp(int socket_id);
+
+/* ================== Utilidades AT ================== */
 
 bool CellularSendCommand( const char *command, char *response, size_t response_size, uint32_t timeout_ms);
+bool CellularWaitForResponse(const char *expected, char *response, size_t response_size, uint32_t timeout_ms);
 
 
-bool CellularWaitForResponse(
-    const char *expected,
-    char *response,
-    size_t response_size,
-    uint32_t timeout_ms
-);
+/* ================== Manejo de sockets ================== */
 
 bool CellularPrintSocketState(void);
 void CellularCloseAllSockets(void);
-
 int CellularGetOpenSockets(int *sockets, int max_sockets);
 
-bool CellularOpenSocket(
-    int socket_id,
-    const char *type,   // "TCP" o "UDP"
-    const char *host,
-    int port
-);
-
-/*
-Tu función CellularOpenTcp() puede ser simplemente un wrapper que llama a la genérica:
-c
-
-bool CellularOpenTcp(int socket_id, const char *server, int port)
-{
-    return CellularOpenSocket(socket_id, "TCP", server, port);
-
-*/
-
+// type"TCP" o "UDP"
+bool CellularOpenSocket(int socket_id, const char *type, const char *host, int port);
 bool CellularCloseSocket(int socket_id);
-
-
-bool CellularIsReady(void);
-
-
-bool CellularPowerOff(void);
-bool CellularPowerOffHard(void);
-
-
-/* Conexión de red */
-
-//bool CellularConnect(void);
-
-//bool CellularDisconnect(void);
-
-
-/* PDP */
-
-//bool CellularPdpConfigure(const char *apn);
-
-//bool CellularPdpActivate(void);
-
-/* Consultas requeridas por el Middleware (IMEI y NTP) */
-bool CellularGetImei(char *imei_out, size_t max_len);
-bool CellularGetNtpTime(char *timestamp_out, size_t max_len);
-
-/* Manejo de Sockets TCP y SMS */
-bool CellularTcpConnect(const char *host, uint16_t port);
-bool CellularTcpSend(const uint8_t *buffer, size_t length);
-int CellularTcpReceive(uint8_t *buffer, size_t length, uint32_t timeout_ms);
-bool CellularTcpDisconnect(void);
-
-/* SMS */
-bool CellularSmsSend(const char *number, const char *message);
-
-
 
 bool CellularSendTcp(int socket_id, const char *data, size_t length);
 bool CellularReceiveTcp(int socket_id, char *data, size_t data_size);
+
+
+// TODO: implementar en el futuro
+ bool CellularGetImei(char *imei_out, size_t max_len);
+ bool CellularGetNtpTime(char *timestamp_out, size_t max_len);
+ bool CellularSmsSend(const char *number, const char *message);
+
 
 #endif /* CELLULAR_H */

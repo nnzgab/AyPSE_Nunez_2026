@@ -721,288 +721,6 @@ bool CellularGetPdpStatus( bool *active, char *ip_address, size_t ip_address_siz
 }
 
 
-static bool CellularGetQioOpenResult(
-    const char *response,
-    int socket_id,
-    int *result
-);
-
-static bool CellularGetQioOpenResult(
-    const char *response,
-    int socket_id,
-    int *result
-)
-{
-    if (response == NULL || result == NULL)
-    {
-        return false;
-    }
-
-    char prefix[32];
-
-    snprintf(
-        prefix,
-        sizeof(prefix),
-        "+QIOPEN: %d,",
-        socket_id
-    );
-
-    const char *qioopen = strstr(response, prefix);
-
-    if (qioopen == NULL)
-    {
-        return false;
-    }
-
-    qioopen += strlen(prefix);
-
-    if (sscanf(qioopen, "%d", result) != 1)
-    {
-        return false;
-    }
-
-    printf(
-        "CELLULAR: QIOPEN socket=%d result=%d\n",
-        socket_id,
-        *result
-    );
-
-    return true;
-}
-
-
-bool CellularOpenTcp(
-    int socket_id,
-    const char *server,
-    uint16_t port
-)
-{
-    char command[256];
-    char response[256];
-
-    if (server == NULL)
-    {
-        return false;
-    }
-
-    snprintf(
-        command,
-        sizeof(command),
-        "AT+QIOPEN=1,%d,\"TCP\",\"%s\",%u,0,0\r\n",
-        socket_id,
-        server,
-        port
-    );
-
-    printf(
-        "CELLULAR: Opening TCP connection to %s:%u\n",
-        server,
-        port
-    );
-
-    /*
-     * --------------------------------------------------------
-     * ETAPA 1:
-     * Enviar QIOPEN y esperar respuesta inmediata.
-     *
-     * Puede llegar:
-     *
-     * OK
-     *
-     * o:
-     *
-     * OK
-     * +QIOPEN: socket,result
-     * --------------------------------------------------------
-     */
-
-    if (!CellularSendCommand(
-            command,
-            response,
-            sizeof(response),
-            CELLULAR_QIOPEN_COMMAND_TIMEOUT_MS))
-    {
-        printf("CELLULAR: QIOPEN command failed\n");
-        return false;
-    }
-
-    /*
-     * QIOPEN debe aceptar el comando con OK.
-     */
-
-    if (strstr(response, "OK") == NULL)
-    {
-        printf("CELLULAR: QIOPEN rejected\n");
-        return false;
-    }
-
-    /*
-     * --------------------------------------------------------
-     * ETAPA 2:
-     * Verificar si +QIOPEN ya llegó junto al OK.
-     * --------------------------------------------------------
-     */
-
-    char expected[64];
-
-    snprintf(
-        expected,
-        sizeof(expected),
-        "+QIOPEN: %d,",
-        socket_id
-    );
-
-    int result;
-
-    if (CellularGetQioOpenResult(
-            response,
-            socket_id,
-            &result))
-    {
-        printf(
-            "CELLULAR: QIOPEN socket=%d result=%d\n",
-            socket_id,
-            result
-        );
-
-        if (result == 0)
-        {
-            printf(
-                "CELLULAR: TCP connection established "
-                "(URC llegó junto al OK)\n"
-            );
-
-            return true;
-        }
-
-        printf(
-            "CELLULAR: TCP connection failed, result=%d\n",
-            result
-        );
-
-        return false;
-    }
-
-    /*
-     * --------------------------------------------------------
-     * ETAPA 3:
-     * La URC todavía no llegó.
-     * Esperamos:
-     *
-     * +QIOPEN: socket,result
-     * --------------------------------------------------------
-     */
-
-    printf(
-        "CELLULAR: QIOPEN accepted, "
-        "waiting for connection result...\n"
-    );
-
-    char urc_response[256];
-
-    if (!CellularWaitForResponse(
-            expected,
-            urc_response,
-            sizeof(urc_response),
-            CELLULAR_QIOPEN_RESULT_TIMEOUT_MS))
-    {
-        printf(
-            "CELLULAR: Timeout waiting for QIOPEN result\n"
-        );
-
-        return false;
-    }
-
-    /*
-     * --------------------------------------------------------
-     * ETAPA 4:
-     * Analizar la URC recibida.
-     * --------------------------------------------------------
-     */
-
-    if (!CellularGetQioOpenResult(
-            urc_response,
-            socket_id,
-            &result))
-    {
-        printf(
-            "CELLULAR: Invalid QIOPEN result\n"
-        );
-
-        return false;
-    }
-
-    printf(
-        "CELLULAR: QIOPEN socket=%d result=%d\n",
-        socket_id,
-        result
-    );
-
-    if (result != 0)
-    {
-        printf(
-            "CELLULAR: TCP connection failed, result=%d\n",
-            result
-        );
-
-        return false;
-    }
-
-    printf(
-        "CELLULAR: TCP connection established\n"
-    );
-
-    return true;
-}
-
-
-
-bool CellularCloseTcp(int socket_id)
-{
-    char command[64];
-    char response[128];
-
-    snprintf(
-        command,
-        sizeof(command),
-        "AT+QICLOSE=%d\r\n",
-        socket_id
-    );
-
-    printf(
-        "CELLULAR: Closing TCP socket %d\n",
-        socket_id
-    );
-
-    if (!CellularSendCommand(
-            command,
-            response,
-            sizeof(response),
-            CELLULAR_TCP_COMMAND_TIMEOUT_MS))
-    {
-        printf(
-            "CELLULAR: QICLOSE command failed\n"
-        );
-
-        return false;
-    }
-
-    if (strstr(response, "OK") == NULL)
-    {
-        printf(
-            "CELLULAR: QICLOSE rejected\n"
-        );
-
-        return false;
-    }
-
-    printf(
-        "CELLULAR: TCP socket %d closed\n",
-        socket_id
-    );
-
-    return true;
-}
 
 
 
@@ -1676,3 +1394,28 @@ bool CellularPowerOffHard(void) {
     return true;
 }
 
+#include <string.h>
+
+bool CellularGetImei(char *imei_out, size_t max_len) {
+    if (imei_out == NULL || max_len == 0) {
+        return false;
+    }
+    const char *fake_imei = "123456789012345"; // valor fijo
+    strncpy(imei_out, fake_imei, max_len - 1);
+    imei_out[max_len - 1] = '\0';
+    return true; // éxito
+}
+
+bool CellularGetNtpTime(char *timestamp_out, size_t max_len) {
+    if (timestamp_out == NULL || max_len == 0) {
+        return false;
+    }
+    const char *fake_time = "2026-08-29 14:44:00"; // valor fijo
+    strncpy(timestamp_out, fake_time, max_len - 1);
+    timestamp_out[max_len - 1] = '\0';
+    return true; // éxito
+}
+
+bool CellularSmsSend(const char *number, const char *message){
+    return true;
+}
