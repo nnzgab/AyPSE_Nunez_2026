@@ -71,7 +71,7 @@ void app_main(void)
     //unity_run_tests_by_tag("[tcp]", false);
 
               /* Agregas esta línea para ejecutar init cellular automáticamente */
-    //unity_run_tests_by_tag("[power-off]", false);
+    unity_run_tests_by_tag("[power-off]", false);
   
                  /* Agregas esta línea para ejecutar init cellular automáticamente */
     //unity_run_tests_by_tag("[socket]", false);
@@ -81,7 +81,14 @@ void app_main(void)
     //unity_run_tests_by_tag("[sendrecv]", false);
 
                   /* Agregas esta línea para ejecutar init cellular automáticamente */
-    unity_run_tests_by_tag("[sendrecv_]", false);
+    //unity_run_tests_by_tag("[sendrecv_]", false);
+
+                  /* Agregas esta línea para ejecutar init cellular automáticamente */
+    //unity_run_tests_by_tag("[send_]", false);
+
+                  /* Agregas esta línea para ejecutar init cellular automáticamente */
+    //unity_run_tests_by_tag("[receivetcp_]", false);
+
 
     UNITY_END();
 

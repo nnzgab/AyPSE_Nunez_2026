@@ -15,9 +15,9 @@
 //#define CELLULAR_TCP_TEST_SERVER "tcpbin.com"
 //#define CELLULAR_TCP_TEST_PORT   4242
 
-
-#define CELLULAR_TCP_TEST_SERVER "kvvye-190-183-23-94.run.pinggy-free.link"
-#define CELLULAR_TCP_TEST_PORT   40485
+//tcp://vngko-190-183-23-94.run.pinggy-free.link:40437     
+#define CELLULAR_TCP_TEST_SERVER "vngko-190-183-23-94.run.pinggy-free.link"
+#define CELLULAR_TCP_TEST_PORT   40437
 //tcp://qextg-190-183-23-94.run.pinggy-free.link:34553       
 
 #define CELLULAR_AT_TIMEOUT_MS        1000   // comandos básicos

@@ -517,3 +517,168 @@ TEST_CASE(
     );
     printf("TCP cerrado correctamente.\n");
 }
+
+TEST_CASE(
+    "TEST-BSP-CELLULAR-24 TCP send",
+    "[bsp][cellular][tcp][send_]"
+)
+{
+    UartHalInit(UART_BAUDRATE);
+
+    bool active;
+    char ip_address[64];
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularGetPdpStatus(
+            &active,
+            ip_address,
+            sizeof(ip_address)
+        ),
+        "No se pudo consultar PDP"
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        active,
+        "El contexto PDP no está activo"
+    );
+
+    CellularCloseAllSockets();
+
+    const int socket_id = 0;
+    const char *payload = "HELLO\r\n";
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularOpenTcp(
+            socket_id,
+            CELLULAR_TCP_TEST_SERVER,
+            CELLULAR_TCP_TEST_PORT
+        ),
+        "No se pudo abrir la conexión TCP"
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularSendTcp(
+            socket_id,
+            payload,
+            strlen(payload)
+        ),
+        "No se pudieron enviar los datos TCP"
+    );
+
+    printf(
+        "TCP TX: %s\n",
+        payload
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularCloseTcp(socket_id),
+        "No se pudo cerrar el socket TCP"
+    );
+}
+
+TEST_CASE(
+    "TEST-BSP-CELLULAR-25 TCP send and receive",
+    "[bsp][cellular][tcp][receivetcp_]"
+)
+{
+    UartHalInit(UART_BAUDRATE);
+
+    bool active;
+    char ip_address[64];
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularGetPdpStatus(
+            &active,
+            ip_address,
+            sizeof(ip_address)
+        ),
+        "No se pudo consultar PDP"
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        active,
+        "El contexto PDP no está activo"
+    );
+
+    printf(
+        "\nPDP activo. IP: %s\n",
+        ip_address
+    );
+
+    CellularCloseAllSockets();
+
+    const int socket_id = 0;
+    const char *payload = "HELLO\r\n";
+
+    /*
+     * Abrir TCP
+     */
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularOpenTcp(
+            socket_id,
+            CELLULAR_TCP_TEST_SERVER,
+            CELLULAR_TCP_TEST_PORT
+        ),
+        "No se pudo abrir la conexión TCP"
+    );
+
+    printf(
+        "\nTCP conectado correctamente.\n"
+    );
+
+    /*
+     * Enviar TCP mediante BSP
+     */
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularSendTcp(
+            socket_id,
+            payload,
+            strlen(payload)
+        ),
+        "No se pudieron enviar los datos TCP"
+    );
+
+    printf(
+        "TCP TX: %s\n",
+        payload
+    );
+
+    /*
+     * Recibir TCP mediante BSP
+     */
+    char response[256];
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularReceiveTcp(
+            socket_id,
+            response,
+            sizeof(response)
+        ),
+        "No se pudieron recibir los datos TCP"
+    );
+
+    printf(
+        "TCP RX: %s\n",
+        response
+    );
+
+    /*
+     * Comprobar respuesta del servidor
+     */
+    TEST_ASSERT_TRUE_MESSAGE(
+        strstr(response, "chau") != NULL,
+        "La respuesta TCP no contiene 'chau'"
+    );
+
+    /*
+     * Cerrar TCP
+     */
+    TEST_ASSERT_TRUE_MESSAGE(
+        CellularCloseTcp(socket_id),
+        "No se pudo cerrar el socket TCP"
+    );
+
+    printf(
+        "TCP cerrado correctamente.\n"
+    );
+}

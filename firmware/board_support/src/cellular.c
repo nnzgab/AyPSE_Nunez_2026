@@ -1421,6 +1421,179 @@ bool CellularSendTcp(
 
 
 
+bool CellularReceiveTcp(
+    int socket_id,
+    char *data,
+    size_t data_size
+)
+{
+    char response[256];
+    char command[64];
+    char expected[64];
+
+    if (data == NULL || data_size == 0)
+    {
+        printf("CELLULAR: Invalid TCP receive buffer\n");
+        return false;
+    }
+
+    data[0] = '\0';
+
+    /*
+     * Esperar la notificación de que llegaron datos.
+     */
+    snprintf(
+        expected,
+        sizeof(expected),
+        "+QIURC: \"recv\",%d",
+        socket_id
+    );
+
+    printf(
+        "CELLULAR: Waiting for TCP data on socket %d\n",
+        socket_id
+    );
+
+    if (!CellularWaitForResponse(
+            expected,
+            response,
+            sizeof(response),
+            CELLULAR_TCP_COMMAND_TIMEOUT_MS))
+    {
+        printf(
+            "CELLULAR: No TCP receive notification\n"
+        );
+
+        return false;
+    }
+
+    /*
+     * Solicitar los datos disponibles.
+     *
+     * data_size - 1 deja espacio para '\0'.
+     */
+    snprintf(
+        command,
+        sizeof(command),
+        "AT+QIRD=%d,%d\r\n",
+        socket_id,
+        (int)(data_size - 1)
+    );
+
+    if (!CellularSendCommand(
+            command,
+            response,
+            sizeof(response),
+            CELLULAR_TCP_COMMAND_TIMEOUT_MS))
+    {
+        printf(
+            "CELLULAR: QIRD command failed\n"
+        );
+
+        return false;
+    }
+
+    /*
+     * Buscar:
+     *
+     * +QIRD: <cantidad>
+     */
+    char *qird = strstr(response, "+QIRD:");
+
+    if (qird == NULL)
+    {
+        printf(
+            "CELLULAR: Invalid QIRD response\n"
+        );
+
+        return false;
+    }
+
+    /*
+     * Obtener la cantidad de bytes recibidos.
+     *
+     * Ejemplo:
+     *
+     * +QIRD: 5
+     */
+    int received_length = 0;
+
+    if (sscanf(qird, "+QIRD: %d", &received_length) != 1)
+    {
+        printf(
+            "CELLULAR: Could not parse QIRD length\n"
+        );
+
+        return false;
+    }
+
+    if (received_length <= 0)
+    {
+        printf(
+            "CELLULAR: QIRD returned no data\n"
+        );
+
+        return false;
+    }
+
+    /*
+     * Buscar el comienzo de la línea que contiene
+     * los datos TCP.
+     */
+    char *payload = strchr(qird, '\n');
+
+    if (payload == NULL)
+    {
+        printf(
+            "CELLULAR: QIRD payload not found\n"
+        );
+
+        return false;
+    }
+
+    payload++;
+
+    /*
+     * Verificar que el buffer del usuario sea suficiente.
+     */
+    if ((size_t)received_length >= data_size)
+    {
+        printf(
+            "CELLULAR: Receive buffer too small "
+            "(received=%d buffer=%zu)\n",
+            received_length,
+            data_size
+        );
+
+        return false;
+    }
+
+    /*
+     * Copiar EXACTAMENTE los bytes indicados por QIRD.
+     *
+     * No usamos strlen(), porque después de los datos
+     * aparecen elementos del protocolo AT como "OK".
+     */
+    memcpy(
+        data,
+        payload,
+        (size_t)received_length
+    );
+
+    data[received_length] = '\0';
+
+    printf(
+        "CELLULAR: TCP data received: %d bytes\n",
+        received_length
+    );
+
+    return true;
+}
+
+
+
+
+
 
 
 
