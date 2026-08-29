@@ -15,16 +15,10 @@
 //#define CELLULAR_TCP_TEST_SERVER "tcpbin.com"
 //#define CELLULAR_TCP_TEST_PORT   4242
 
-//tcp://vngko-190-183-23-94.run.pinggy-free.link:40437     
 #define CELLULAR_TCP_TEST_SERVER "vngko-190-183-23-94.run.pinggy-free.link"
 #define CELLULAR_TCP_TEST_PORT   40437
-//tcp://qextg-190-183-23-94.run.pinggy-free.link:34553       
+   
 
-#define CELLULAR_AT_TIMEOUT_MS        1000   // comandos básicos
-#define CELLULAR_QICSGP_TIMEOUT_MS    2000   // configuración PDP
-#define CELLULAR_QIACT_TIMEOUT_MS     30000  // activación PDP
-#define CELLULAR_QIOPEN_TIMEOUT_MS    60000  // apertura de socket
-#define CELLULAR_QICLOSE_TIMEOUT_MS   2000   // cierre de socket
 
 
 
@@ -34,9 +28,7 @@
 /* Inicialización y estado */
 /* Servicios de Control y Red definidos para el módulo celular*/
 
-bool CellularInit(void);
-bool cellularPowerOn(void);
-bool CellularReset(void);
+
 
 bool CellularPowerOn(void);
 
@@ -112,16 +104,16 @@ bool CellularPowerOffHard(void);
 
 /* Conexión de red */
 
-bool CellularConnect(void);
+//bool CellularConnect(void);
 
-bool CellularDisconnect(void);
+//bool CellularDisconnect(void);
 
 
 /* PDP */
 
-bool CellularPdpConfigure(const char *apn);
+//bool CellularPdpConfigure(const char *apn);
 
-bool CellularPdpActivate(void);
+//bool CellularPdpActivate(void);
 
 /* Consultas requeridas por el Middleware (IMEI y NTP) */
 bool CellularGetImei(char *imei_out, size_t max_len);

@@ -26,10 +26,15 @@
 
 #define CELLULAR_NETWORK_POLL_MS       1000
 #define CELLULAR_NETWORK_TIMEOUT_MS    120000
-//#define CELLULAR_QIACT_TIMEOUT_MS    160000
+#define CELLULAR_QIACT_TIMEOUT_MS    160000
 
+
+#define CELLULAR_QIOPEN_TIMEOUT_MS    60000  // apertura de socket
 #define CELLULAR_QIOPEN_COMMAND_TIMEOUT_MS    5000
 #define CELLULAR_QIOPEN_RESULT_TIMEOUT_MS    30000
+#define CELLULAR_QICSGP_TIMEOUT_MS    2000   // configuración PDP
+
+#define CELLULAR_QICLOSE_TIMEOUT_MS   2000   // cierre de socket
 
 #define CELLULAR_TCP_COMMAND_TIMEOUT_MS 5000
 
@@ -110,7 +115,8 @@ bool CellularIsReady(void)
 
 /* ============================================================
  * Envío de comandos AT
- * ============================================================ */
+ * ============================================================ 
+ * */
 
 
 bool CellularSendCommand(
@@ -1600,40 +1606,9 @@ bool CellularReceiveTcp(
 
 
 /////////////////////////////////////
-bool CellularInit(void)
-{
-    printf("\n");
-    printf("========================================\n");
-    printf(" CELLULAR INIT\n");
-    printf("========================================\n");
-
-    if (!CellularPowerOn()) {
-        printf("CELLULAR: Power ON fallo\n");
-        return false;
-    }
-
-    if (!CellularWaitReady(12000)) {
-        printf("CELLULAR: no se recibio RDY\n");
-        return false;
-    }
-
-    if (!CellularIsReady()) {
-        printf("CELLULAR: AT no respondio OK\n");
-        return false;
-    }
-
-    printf("CELLULAR: EG915U listo\n");
-
-    return true;
-}
 
 
 
-
-bool CellularReset(void) {
-    UartHalWriteBytes("AT+CFUN=1,1\r\n", 13);
-    return true;
-}
 
 
 // Apagado lógico recomendado
@@ -1701,123 +1676,3 @@ bool CellularPowerOffHard(void) {
     return true;
 }
 
-
-
-bool CellularConnect(void) {
-    char response[64];
-    UartHalWriteBytes("AT+CREG?\r\n", 10);
-    int len = UartHalReadBytes(response, sizeof(response) - 1, 2000);
-    return (len > 0 && strstr(response, "+CREG: 0,1") != NULL);
-}
-
-bool CellularDisconnect(void) {
-    return true;
-}
-
-
-/*
-bool CellularPdpConfigure(const char *apn) {
-    char cmd[64];
-    snprintf(cmd, sizeof(cmd), "AT+QICSGP=1,1,\"%s\",,,1\r\n", apn);
-    // 1. Transmitir por TX (GPIO 18) 
-    UartHalWriteBytes(cmd, strlen(cmd));
-
-    char response[64];
-    // 2. Intentar leer por RX (GPIO 19) 
-    int len = UartHalReadBytes(response, sizeof(response) - 1, 2000);
-
-    /////////////////////////////////////////////////
-
-    
-    if (len > 0) {
-        response[len] = '\0'; // Asegurar fin de cadena 
-    //    ESP_LOGI(TAG, ">>> ECO DETECTADO EN RX (%d bytes): %s", len, response);
-    } else {
-    //    ESP_LOGE(TAG, ">>> NO SE RECIBIÓ NADA EN RX (Timeout/Circuito abierto)");
-    }
-    
-    /////////////////////////////////////////////////
-
-
-
-    return (len > 0 && strstr(response, "OK") != NULL);
-}
-
-*/
-/*
-bool CellularPdpActivate(void) {
-    UartHalWriteBytes("AT+QIACT=1\r\n", 12);
-    char response[64];
-    int len = UartHalReadBytes(response, sizeof(response) - 1, 5000);
-    return (len > 0 && strstr(response, "OK") != NULL);
-}
-
-bool CellularGetImei(char *imei_out, size_t max_len) {
-    if (!imei_out || max_len < 16) return false;
-    UartHalWriteBytes("AT+GSN\r\n", 8);
-    char response[64];
-    int len = UartHalReadBytes(response, sizeof(response) - 1, 2000);
-    if (len > 0) {
-        response[len] = '\0';
-        // En una implementación completa se extrae la línea numérica del IMEI.
-        snprintf(imei_out, max_len, "861234567890123");
-        return true;
-    }
-    return false;
-}
-
-bool CellularGetNtpTime(char *timestamp_out, size_t max_len) {
-    if (!timestamp_out) return false;
-    // Consulta NTP mediante comandos AT del Quectel y formato de fecha/hora[cite: 1]
-    snprintf(timestamp_out, max_len, "2026-06-18 12:00:00");
-    return true;
-}
-
-bool CellularTcpConnect(const char *host, uint16_t port) {
-    char cmd[128];
-    snprintf(cmd, sizeof(cmd), "AT+QIOPEN=1,0,\"TCP\",\"%s\",%d,0,2\r\n", host, port);
-    UartHalWriteBytes(cmd, strlen(cmd));
-    char response[128];
-    int len = UartHalReadBytes(response, sizeof(response) - 1, 5000);
-    return (len > 0 && strstr(response, "+QIOPEN: 0,0") != NULL);
-}
-
-bool CellularTcpSend(const uint8_t *buffer, size_t length) {
-    char cmd[64];
-    snprintf(cmd, sizeof(cmd), "AT+QISEND=0,%u\r\n", (unsigned int)length);
-    UartHalWriteBytes(cmd, strlen(cmd));
-    
-    char prompt[8];
-    int len = UartHalReadBytes(prompt, sizeof(prompt) - 1, 1000);
-    if (len > 0 && strchr(prompt, '>') != NULL) {
-        UartHalWriteBytes((const char *)buffer, length);
-        char response[64];
-        int r_len = UartHalReadBytes(response, sizeof(response) - 1, 3000);
-        return (r_len > 0 && strstr(response, "SEND OK") != NULL);
-    }
-    return false;
-}
-
-int CellularTcpReceive(uint8_t *buffer, size_t length, uint32_t timeout_ms) {
-    return UartHalReadBytes((char *)buffer, length, timeout_ms);
-}
-
-bool CellularTcpDisconnect(void) {
-    UartHalWriteBytes("AT+QICLOSE=0\r\n", 14);
-    return true;
-}
-
-bool CellularSmsSend(const char *number, const char *message) {
-    char cmd[64];
-    snprintf(cmd, sizeof(cmd), "AT+CMGS=\"%s\"\r\n", number);
-    UartHalWriteBytes(cmd, strlen(cmd));
-    
-    UartHalWriteBytes(message, strlen(message));
-    char ctrl_z = 0x1A;
-    UartHalWriteBytes(&ctrl_z, 1);
-    
-    char response[64];
-    int len = UartHalReadBytes(response, sizeof(response) - 1, 10000);
-    return (len > 0 && strstr(response, "+CMGS:") != NULL);
-}
-*/
