@@ -1,7 +1,9 @@
 idf_build_get_property(target IDF_TARGET)
 
 # Always compiled source files
-set(srcs "src/event_frame.c"
+set(srcs 
+    "src/event_frame.c"
+    "src/status_indicator.c"
     )
 
 # Always included headers
