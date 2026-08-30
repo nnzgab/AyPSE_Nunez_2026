@@ -17,10 +17,10 @@
 
 //#define CELLULAR_TCP_TEST_SERVER "tcpbin.com"
 //#define CELLULAR_TCP_TEST_PORT   4242
-//│  tcp://zrqoy-190-183-23-94.run.pinggy-free.link:35597           
+//nsjfz-190-183-23-94.run.pinggy-free.link:38577
 
-#define CELLULAR_TCP_TEST_SERVER "zrqoy-190-183-23-94.run.pinggy-free.link"
-#define CELLULAR_TCP_TEST_PORT   35597
+#define CELLULAR_TCP_TEST_SERVER "nsjfz-190-183-23-94.run.pinggy-free.link"
+#define CELLULAR_TCP_TEST_PORT   38577
    
 
 /*==================[external functions declaration]=========================*/

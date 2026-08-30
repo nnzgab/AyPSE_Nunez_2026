@@ -9,8 +9,17 @@
 #include "freertos/task.h"
 
 #include <stdio.h>
+/*
+ void setUp(void)
+{
+    // Nada que inicializar antes de cada test por ahora.
+}
 
- 
+void tearDown(void)
+{
+    CellularCloseAllSockets();
+}
+*/
 /*
  * ============================================================================
  * CONVENCION DE ESTADO ENTRE TESTS
@@ -177,7 +186,7 @@ TEST_CASE("TEST-BSP-CELLULAR-6 Network registration", "[bsp][cellular][network]"
 
     printf("Waiting for cellular network registration...\n");
 
-    bool registered = CellularWaitNetworkRegistration(120000); // 2 minutos
+    bool registered = CellularWaitNetworkRegistration(5000); // 2 minutos
 
     TEST_ASSERT_TRUE_MESSAGE(registered, "ERROR: CellularWaitNetworkRegistration()");
 

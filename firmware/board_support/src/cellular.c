@@ -1,4 +1,3 @@
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -25,27 +24,252 @@
 #define CELLULAR_CFUN_TIMEOUT_MS    10000
 
 #define CELLULAR_NETWORK_POLL_MS       1000
-#define CELLULAR_NETWORK_TIMEOUT_MS    120000
-#define CELLULAR_QIACT_TIMEOUT_MS    160000
+#define CELLULAR_NETWORK_TIMEOUT_MS    5000//120000
+#define CELLULAR_QIACT_TIMEOUT_MS    5000//160000
 
 
-#define CELLULAR_QIOPEN_TIMEOUT_MS    8000//60000  // apertura de socket
-//#define CELLULAR_QIOPEN_COMMAND_TIMEOUT_MS    5000
-//#define CELLULAR_QIOPEN_RESULT_TIMEOUT_MS    30000
+#define CELLULAR_QIOPEN_TIMEOUT_MS    15000//60000  // apertura de socket
+#define CELLULAR_QIOPEN_COMMAND_TIMEOUT_MS    5000
+#define CELLULAR_QIOPEN_RESULT_TIMEOUT_MS    5000//30000
 #define CELLULAR_QICSGP_TIMEOUT_MS    2000   // configuración PDP
 
 #define CELLULAR_QICLOSE_TIMEOUT_MS   2000   // cierre de socket
 
-#define CELLULAR_TCP_COMMAND_TIMEOUT_MS 5000
+#define CELLULAR_TCP_COMMAND_TIMEOUT_MS 25000
 
 #define CELLULAR_PWRKEY_POWEROFF_PULSE_MS 3000
 
-#define CELLULAR_QPOWD_TIMEOUT_MS 20000
+#define CELLULAR_QPOWD_TIMEOUT_MS 5000//20000
 
 
+/* ============================================================
+ * AT RX Engine
+ * ============================================================
+ *                     UART RX
+ *                        │
+ *                        ▼
+ *              ┌───────────────────┐
+ *              │   AT RX ENGINE     │   CellularEngineStep()
+ *              └─────────┬──────────┘
+ *                        │
+ *              ┌─────────┴─────────┐
+ *              ▼                   ▼
+ *          RESPUESTA              URC
+ *              │                   │
+ *              │                   ▼
+ *              │              ┌─────────┐
+ *              │              │  QUEUE  │
+ *              │              └────┬────┘
+ *              ▼                   ▼
+ *        SendCommand           ReceiveTcp /
+ *                              WaitForResponse
+ *
+ * CellularEngineStep() es el ÚNICO punto de contacto con
+ * UartHalReadBytes(). Lee lo que haya disponible y clasifica cada
+ * línea completa en una de dos categorías:
+ *
+ *   - RESPUESTA: pertenece a la respuesta síncrona del comando AT en
+ *     curso (ej: "OK", "+CSQ: 20,99", "SEND OK", ">"). Se devuelve tal
+ *     cual al que llamó (normalmente CellularSendCommand).
+ *
+ *   - URC (Unsolicited Result Code): evento asíncrono del módem que
+ *     puede llegar en cualquier momento, incluso pegado a la
+ *     respuesta de un comando que no tiene nada que ver (el caso que
+ *     nos rompía los tests: "+QIURC: \"recv\",0,5" llegando junto con
+ *     "SEND OK"). Se encola en s_urc_queue en vez de mezclarse con la
+ *     respuesta, y se consume después por prefijo/contenido desde
+ *     donde haga falta.
+ *
+ * Por qué esto es genérico y no un parche puntual para QIURC:
+ * cualquier línea que matchee un prefijo de la tabla s_urc_prefixes
+ * se trata igual, sin importar qué función disparó la lectura física
+ * que la trajo. Agregar un URC nuevo en el futuro es una línea en esa
+ * tabla, no una modificación en cada función que pueda toparse con él.
+ *
+ * ALCANCE ACTUAL: solo "+QIURC:" está en la tabla. "+QIOPEN:" queda
+ * afuera a propósito por ahora — CellularOpenSocket() todavía espera
+ * verlo mezclado en la respuesta de CellularSendCommand(), como
+ * siempre. El día que se quiera hacer lo mismo con QIOPEN, hay que
+ * agregarlo a la tabla Y adaptar CellularOpenSocket() para que lo
+ * consuma de la cola en vez de parsearlo de 'response' — las dos
+ * cosas juntas, no una sin la otra.
+ *
+ * No hay una tarea de FreeRTOS leyendo en background: el modelo es
+ * "pull" — cada consumidor dispara una lectura física cuando la
+ * necesita. Como los tests corren secuencialmente (nunca hay dos
+ * comandos en vuelo al mismo tiempo), esto alcanza sin necesitar
+ * concurrencia real. Si el día de mañana hiciera falta un listener
+ * continuo, este mismo clasificador se reutilizaría dentro de esa
+ * tarea sin cambios.
+ */
 
+#define CELLULAR_URC_QUEUE_SLOTS     4
+#define CELLULAR_URC_ITEM_SIZE       128
+#define CELLULAR_ENGINE_LINE_SIZE    128
 
+typedef struct
+{
+    char text[CELLULAR_URC_ITEM_SIZE];
+    bool used;
+} CellularUrcSlot;
 
+static CellularUrcSlot s_urc_queue[CELLULAR_URC_QUEUE_SLOTS];
+
+/*
+ * Prefijos que identifican una línea como URC en vez de respuesta de
+ * comando. Ver nota de "ALCANCE ACTUAL" arriba antes de agregar
+ * "+QIOPEN:" acá.
+ */
+static const char *const s_urc_prefixes[] = {
+    "+QIURC:",
+};
+#define CELLULAR_URC_PREFIX_COUNT (sizeof(s_urc_prefixes) / sizeof(s_urc_prefixes[0]))
+
+static bool CellularLineIsUrc(const char *line)
+{
+    for (size_t i = 0; i < CELLULAR_URC_PREFIX_COUNT; i++)
+    {
+        if (strncmp(line, s_urc_prefixes[i], strlen(s_urc_prefixes[i])) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void CellularUrcEnqueue(const char *line)
+{
+    for (int i = 0; i < CELLULAR_URC_QUEUE_SLOTS; i++)
+    {
+        if (!s_urc_queue[i].used)
+        {
+            strncpy(s_urc_queue[i].text, line, CELLULAR_URC_ITEM_SIZE - 1);
+            s_urc_queue[i].text[CELLULAR_URC_ITEM_SIZE - 1] = '\0';
+            s_urc_queue[i].used = true;
+            printf("CELLULAR: URC encolado: %s\n", line);
+            return;
+        }
+    }
+
+    printf("CELLULAR: Cola de URCs llena, se descarta: %s\n", line);
+}
+
+/*
+ * Busca el primer URC en cola cuyo texto contenga 'expected' y lo
+ * extrae (dequeue). No importa en qué llamada a CellularEngineStep
+ * haya llegado: pudo ser durante un CellularSendCommand de otro
+ * comando, o durante una espera anterior que no lo estaba buscando.
+ */
+static bool CellularUrcDequeueMatching(
+    const char *expected,
+    char *out,
+    size_t out_size
+)
+{
+    for (int i = 0; i < CELLULAR_URC_QUEUE_SLOTS; i++)
+    {
+        if (s_urc_queue[i].used && strstr(s_urc_queue[i].text, expected) != NULL)
+        {
+            strncpy(out, s_urc_queue[i].text, out_size - 1);
+            out[out_size - 1] = '\0';
+            s_urc_queue[i].used = false;
+            printf("CELLULAR: URC desencolado: %s\n", out);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/*
+ * Único punto de contacto con UartHalReadBytes(). Hace UNA lectura
+ * física (mismo comportamiento de timeout que antes), separa el
+ * resultado por líneas ("\r\n") y clasifica cada una:
+ *
+ *   - Si matchea un prefijo URC -> se encola, nunca llega a
+ *     response_out.
+ *   - Si no -> se agrega a response_out, conservando los "\r\n"
+ *     originales (varios parsers existentes, como el de QIRD, hacen
+ *     strchr(buffer, '\n') sobre el bloque completo, así que no hay
+ *     que cambiarles el formato que reciben).
+ *
+ * response_out puede ser NULL (o response_out_size 0) cuando a quien
+ * llama solo le interesa que los URCs que hayan llegado queden
+ * encolados, y no le importa el resto del texto (es el caso de
+ * CellularWaitForResponse mientras "bombea" UART buscando un URC).
+ *
+ * Devuelve lo mismo que UartHalReadBytes: bytes físicos leídos, 0 si
+ * no llegó nada en el timeout, negativo en error de lectura.
+ */
+static int CellularEngineStep(
+    uint32_t timeout_ms,
+    char *response_out,
+    size_t response_out_size
+)
+{
+    char raw[256];
+
+    int len = UartHalReadBytes(raw, sizeof(raw) - 1, timeout_ms);
+
+    if (len <= 0)
+    {
+        return len;
+    }
+
+    raw[len] = '\0';
+
+    char *line_start = raw;
+
+    while (*line_start != '\0')
+    {
+        char *line_end = strstr(line_start, "\r\n");
+        bool has_delim = (line_end != NULL);
+        size_t line_len = has_delim
+            ? (size_t)(line_end - line_start)
+            : strlen(line_start);
+
+        if (line_len > 0)
+        {
+            char line_buf[CELLULAR_ENGINE_LINE_SIZE];
+            size_t copy_len = (line_len < sizeof(line_buf) - 1)
+                ? line_len
+                : sizeof(line_buf) - 1;
+
+            memcpy(line_buf, line_start, copy_len);
+            line_buf[copy_len] = '\0';
+
+            if (CellularLineIsUrc(line_buf))
+            {
+                CellularUrcEnqueue(line_buf);
+            }
+            else if (response_out != NULL && response_out_size > 0)
+            {
+                size_t current = strlen(response_out);
+
+                if (current + copy_len + 2 < response_out_size)
+                {
+                    memcpy(response_out + current, line_start, copy_len);
+                    current += copy_len;
+                    response_out[current] = '\0';
+
+                    if (has_delim)
+                    {
+                        strcat(response_out, "\r\n");
+                    }
+                }
+            }
+        }
+
+        if (!has_delim)
+        {
+            break;
+        }
+
+        line_start = line_end + 2; // saltar "\r\n"
+    }
+
+    return len;
+}
 
 
 bool CellularPowerOn(void)
@@ -152,12 +376,16 @@ bool CellularSendCommand(
     printf("CELLULAR TX: %s", command);
 
     /*
-     * Esperamos la respuesta.
+     * Esperamos la respuesta. Pasa por el AT RX Engine: si en esta
+     * misma lectura física llegó algo pegado que matchea un prefijo
+     * URC (hoy: "+QIURC:"), el engine lo desvía a la cola en vez de
+     * dejarlo mezclado acá adentro. 'response' solo recibe las
+     * líneas que NO son URC.
      */
-    int len = UartHalReadBytes(
+    int len = CellularEngineStep(
+        timeout_ms,
         response,
-        response_size - 1,
-        timeout_ms
+        response_size
     );
 
     if (len <= 0)
@@ -165,11 +393,6 @@ bool CellularSendCommand(
         printf("CELLULAR RX timeout\n");
         return false;
     }
-
-    /*
-     * Terminamos la cadena.
-     */
-    response[len] = '\0';
 
     printf("CELLULAR RX: %s\n", response);
 
@@ -744,53 +967,37 @@ bool CellularWaitForResponse(
 
     response[0] = '\0';
 
+    /*
+     * Antes que nada, revisamos la cola de URCs: el que buscamos
+     * puede haber llegado ya, encolado por CellularEngineStep durante
+     * la lectura de OTRO comando (ej: pegado al "SEND OK" de un
+     * CellularSendCommand anterior). Sin este chequeo, esta espera
+     * bloquearía por gusto hasta el timeout, aunque el dato ya esté
+     * disponible desde antes de que empezáramos a esperar.
+     */
+    if (CellularUrcDequeueMatching(expected, response, response_size))
+    {
+        return true;
+    }
+
+    /*
+     * No estaba en cola: bombeamos el engine, que hace lecturas
+     * físicas de UART y sigue clasificando y encolando cualquier URC
+     * que vaya llegando. Revisamos la cola después de cada lectura.
+     */
     uint32_t elapsed_ms = 0;
 
     while (elapsed_ms < timeout_ms)
     {
-        char buffer[128];
-
-        int len = UartHalReadBytes(
-            buffer,
-            sizeof(buffer) - 1,
-            CELLULAR_AT_TIMEOUT_MS
-        );
+        // No nos interesa el canal de "respuesta" acá (no estamos en
+        // medio de ningún comando síncrono); solo que los URCs que
+        // aparezcan queden encolados.
+        int len = CellularEngineStep(CELLULAR_AT_TIMEOUT_MS, NULL, 0);
 
         if (len > 0)
         {
-            buffer[len] = '\0';
-
-            printf("CELLULAR WAIT RX: %s\n", buffer);
-
-            //printf("CELLULAR URC RX: %s\n", buffer);
-
-            /*
-             * Agregamos los datos recibidos al buffer
-             * acumulado.
-             */
-            size_t current_length = strlen(response);
-
-            if (current_length + len < response_size)
+            if (CellularUrcDequeueMatching(expected, response, response_size))
             {
-                memcpy(
-                    response + current_length,
-                    buffer,
-                    len
-                );
-
-                response[current_length + len] = '\0';
-            }
-
-            /*
-             * ¿Llegó la respuesta que estábamos esperando?
-             */
-            if (strstr(response, expected) != NULL)
-            {
-                printf(
-                    "CELLULAR: Expected response received: %s\n",
-                    expected
-                );
-
                 return true;
             }
         }
@@ -954,7 +1161,7 @@ bool CellularOpenSocket(
     snprintf(
         command,
         sizeof(command),
-        "AT+QIOPEN=1,%d,\"%s\",\"%s\",%d,0,1\r\n",
+        "AT+QIOPEN=1,%d,\"%s\",\"%s\",%d,0,0\r\n",///////////////////////////
         socket_id,
         type,
         host,
@@ -1110,6 +1317,14 @@ bool CellularSendTcp(
 
     /*
      * 3. Enviar los datos propiamente dichos.
+     *
+     * NOTA: si el otro extremo contesta muy rápido, esta misma lectura
+     * (dentro de CellularSendCommand -> CellularEngineStep) puede traer
+     * pegado, además de "SEND OK", el URC de recepción. El engine ya lo
+     * clasifica y encola en el momento -- no llega mezclado a
+     * 'response' ni se pierde. CellularReceiveTcp lo va a encontrar en
+     * la cola cuando lo pida, sin importar si llegó antes o después de
+     * que empezara a esperarlo.
      */
     if (!CellularSendCommand(
             data,
@@ -1313,7 +1528,6 @@ bool CellularReceiveTcp(
 
     return true;
 }
-
 
 
 

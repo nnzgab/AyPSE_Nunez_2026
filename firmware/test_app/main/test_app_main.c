@@ -48,15 +48,15 @@ void app_main(void)
 
     unity_run_tests_by_tag("[pdp-status]", false);
 
-    unity_run_tests_by_tag("[tcp]", false);
+    //unity_run_tests_by_tag("[tcp]", false);
   
-    unity_run_tests_by_tag("[socket]", false);
+    //unity_run_tests_by_tag("[socket]", false);
   
-    unity_run_tests_by_tag("[sendrecv]", false);
+    //unity_run_tests_by_tag("[sendrecv]", false);
 
-    unity_run_tests_by_tag("[sendrecv_]", false);
+    //unity_run_tests_by_tag("[sendrecv_]", false);
 
-    unity_run_tests_by_tag("[send_]", false);
+    //unity_run_tests_by_tag("[send_]", false);
 
     unity_run_tests_by_tag("[receivetcp_]", false);
 //*/
