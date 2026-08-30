@@ -60,179 +60,189 @@ TEST_CASE("Cellular STARTING turns LED on", "[status_indicator]")
     TEST_ASSERT_EQUAL(1, GPIORead(GPIO_QUECTEL_LED_STATUS));
 }
 
-TEST_CASE("Status indicator visual demonstration", "[status_indicator][demo]")
+
+/*==================[visual demonstration]==================================*/
+
+TEST_CASE("Status indicator visual demonstration",
+          "[status_indicator][demo]")
 {
     TEST_ASSERT_TRUE(StatusIndicatorInit());
-
-    /*
-     * ============================================================
-     * 1. SISTEMA INICIALIZADO
-     * ============================================================
-     */
 
     printf("\n");
     printf("========================================\n");
     printf(" DEMOSTRACION VISUAL STATUS INDICATOR\n");
     printf("========================================\n");
 
-    printf("\n[1] Modulo apagado\n");
 
+    /*----------------------------------------------------------
+     * 1. MODULO APAGADO
+     *----------------------------------------------------------*/
+
+    printf("\n");
+    printf("[1] MODULO APAGADO\n");
+    printf("    GPIO5 = OFF\n");
+    printf("    GPIO4 = OFF\n");
+
+    StatusIndicatorSetPanic(false);
     StatusIndicatorSetCellular(CELLULAR_STATUS_OFF);
 
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    vTaskDelay(pdMS_TO_TICKS(5000));
 
 
-    /*
-     * ============================================================
+    /*----------------------------------------------------------
      * 2. MODULO ARRANCANDO
-     * ============================================================
-     */
+     *----------------------------------------------------------*/
 
-    printf("\n[2] Modulo arrancando - LED fijo\n");
+    printf("\n");
+    printf("[2] MODULO ARRANCANDO\n");
+    printf("    GPIO5 = ON FIJO\n");
 
     StatusIndicatorSetCellular(CELLULAR_STATUS_STARTING);
 
-    vTaskDelay(pdMS_TO_TICKS(3000));
+    vTaskDelay(pdMS_TO_TICKS(5000));
 
 
-    /*
-     * ============================================================
+    /*----------------------------------------------------------
      * 3. BUSCANDO RED
-     * ============================================================
-     */
+     *----------------------------------------------------------*/
 
-    printf("\n[3] Buscando red - 200 ms ON / 1800 ms OFF\n");
+    printf("\n");
+    printf("[3] BUSCANDO RED\n");
+    printf("    GPIO5 = 200 ms ON / 1800 ms OFF\n");
 
     StatusIndicatorSetCellular(CELLULAR_STATUS_SEARCHING);
 
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < 200; i++)
     {
         StatusIndicatorRunStep();
         vTaskDelay(pdMS_TO_TICKS(25));
     }
 
 
-    /*
-     * ============================================================
+    /*----------------------------------------------------------
      * 4. REGISTRADO EN RED
-     * ============================================================
-     */
+     *----------------------------------------------------------*/
 
-    printf("\n[4] Registrado en red - 1800 ms ON / 200 ms OFF\n");
+    printf("\n");
+    printf("[4] REGISTRADO EN RED\n");
+    printf("    GPIO5 = 1800 ms ON / 200 ms OFF\n");
 
     StatusIndicatorSetCellular(CELLULAR_STATUS_READY);
 
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < 200; i++)
     {
         StatusIndicatorRunStep();
         vTaskDelay(pdMS_TO_TICKS(25));
     }
 
 
-    /*
-     * ============================================================
+    /*----------------------------------------------------------
      * 5. TRANSMITIENDO
-     * ============================================================
-     */
+     *----------------------------------------------------------*/
 
-    printf("\n[5] Transmitiendo - parpadeo rapido\n");
+    printf("\n");
+    printf("[5] TRANSMITIENDO DATOS\n");
+    printf("    GPIO5 = 125 ms ON / 125 ms OFF\n");
 
     StatusIndicatorSetCellular(CELLULAR_STATUS_TRANSMITTING);
 
-    for (int i = 0; i < 80; i++)
+    for (int i = 0; i < 240; i++)
     {
         StatusIndicatorRunStep();
         vTaskDelay(pdMS_TO_TICKS(25));
     }
 
 
-    /*
-     * ============================================================
-     * 6. VUELVE A ESTADO READY
-     * ============================================================
-     */
+    /*----------------------------------------------------------
+     * 6. VUELTA A READY
+     *----------------------------------------------------------*/
 
-    printf("\n[6] Transmision terminada - vuelve a READY\n");
+    printf("\n");
+    printf("[6] TRANSMISION FINALIZADA\n");
+    printf("    GPIO5 vuelve a estado READY\n");
 
     StatusIndicatorSetCellular(CELLULAR_STATUS_READY);
 
-    for (int i = 0; i < 80; i++)
+    for (int i = 0; i < 200; i++)
     {
         StatusIndicatorRunStep();
         vTaskDelay(pdMS_TO_TICKS(25));
     }
 
 
-    /*
-     * ============================================================
-     * 7. ALARMA
-     * ============================================================
-     */
+    /*----------------------------------------------------------
+     * 7. ALARMA DE PANICO
+     *----------------------------------------------------------*/
 
-    printf("\n[7] ALARMA DE PANICO\n");
+    printf("\n");
+    printf("[7] ALARMA DE PANICO\n");
+    printf("    GPIO4 = ON\n");
+    printf("    GPIO5 = READY\n");
 
     StatusIndicatorSetPanic(true);
+    StatusIndicatorSetCellular(CELLULAR_STATUS_READY);
 
-    /*
-     * Mantenemos la alarma activa mientras
-     * el indicador celular sigue funcionando.
-     */
-    for (int i = 0; i < 80; i++)
+    for (int i = 0; i < 240; i++)
     {
         StatusIndicatorRunStep();
         vTaskDelay(pdMS_TO_TICKS(25));
     }
 
 
-    /*
-     * ============================================================
-     * 8. TRANSMISION DE LA ALARMA
-     * ============================================================
-     */
+    /*----------------------------------------------------------
+     * 8. TRANSMITIENDO ALARMA
+     *----------------------------------------------------------*/
 
-    printf("\n[8] Transmitiendo alarma\n");
+    printf("\n");
+    printf("[8] TRANSMITIENDO ALARMA\n");
+    printf("    GPIO4 = ON\n");
+    printf("    GPIO5 = TRANSMITIENDO\n");
 
     StatusIndicatorSetCellular(CELLULAR_STATUS_TRANSMITTING);
 
-    for (int i = 0; i < 80; i++)
+    for (int i = 0; i < 240; i++)
     {
         StatusIndicatorRunStep();
         vTaskDelay(pdMS_TO_TICKS(25));
     }
 
 
-    /*
-     * ============================================================
+    /*----------------------------------------------------------
      * 9. SERVIDOR CONFIRMA RECEPCION
-     * ============================================================
-     */
+     *----------------------------------------------------------*/
 
-    printf("\n[9] Servidor confirma alarma - alarma finalizada\n");
+    printf("\n");
+    printf("[9] SERVIDOR CONFIRMA RECEPCION\n");
+    printf("    GPIO4 = OFF\n");
+    printf("    GPIO5 = READY\n");
 
     StatusIndicatorSetPanic(false);
-
     StatusIndicatorSetCellular(CELLULAR_STATUS_READY);
 
-    for (int i = 0; i < 80; i++)
+    for (int i = 0; i < 240; i++)
     {
         StatusIndicatorRunStep();
         vTaskDelay(pdMS_TO_TICKS(25));
     }
 
 
-    /*
-     * ============================================================
+    /*----------------------------------------------------------
      * 10. MODULO APAGADO
-     * ============================================================
-     */
+     *----------------------------------------------------------*/
 
-    printf("\n[10] Modulo apagado\n");
+    printf("\n");
+    printf("[10] MODULO APAGADO\n");
+    printf("     GPIO4 = OFF\n");
+    printf("     GPIO5 = OFF\n");
 
+    StatusIndicatorSetPanic(false);
     StatusIndicatorSetCellular(CELLULAR_STATUS_OFF);
 
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    vTaskDelay(pdMS_TO_TICKS(15000));
 
-    printf("\n========================================\n");
+
+    printf("\n");
+    printf("========================================\n");
     printf(" FIN DE DEMOSTRACION\n");
     printf("========================================\n");
 

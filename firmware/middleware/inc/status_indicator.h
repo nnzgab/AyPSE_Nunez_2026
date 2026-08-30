@@ -48,4 +48,13 @@ void StatusIndicatorSetCellular(cellular_status_t status);
  */
 void StatusIndicatorRunStep(void);
 
+
+
+/**
+ * @brief Obtiene el estado actual del indicador celular.
+ *
+ * @return Estado actual.
+ */
+cellular_status_t StatusIndicatorGetCellular(void);
+
 #endif /* STATUS_INDICATOR_H */

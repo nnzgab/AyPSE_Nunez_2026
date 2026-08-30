@@ -4,6 +4,7 @@ idf_build_get_property(target IDF_TARGET)
 set(srcs 
     "src/event_frame.c"
     "src/status_indicator.c"
+    "src/panic_handler.c"
     )
 
 # Always included headers

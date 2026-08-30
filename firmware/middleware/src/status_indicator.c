@@ -2,6 +2,7 @@
 
 #include "led.h"
 
+
 /*==================[macros and definitions]=================================*/
 
 /**
@@ -21,11 +22,15 @@
 #define TRANSMITTING_ON_STEPS          (125U / STATUS_INDICATOR_STEP_MS)
 #define TRANSMITTING_OFF_STEPS         (125U / STATUS_INDICATOR_STEP_MS)
 
+
 /*==================[internal data declaration]==============================*/
 
 static cellular_status_t cellular_status = CELLULAR_STATUS_OFF;
+
 static bool panic_active = false;
+
 static uint32_t current_step = 0;
+
 
 /*==================[external functions definition]==========================*/
 
@@ -43,6 +48,7 @@ bool StatusIndicatorInit(void)
     return true;
 }
 
+
 void StatusIndicatorSetPanic(bool active)
 {
     panic_active = active;
@@ -57,6 +63,7 @@ void StatusIndicatorSetPanic(bool active)
     }
 }
 
+
 void StatusIndicatorSetCellular(cellular_status_t status)
 {
     cellular_status = status;
@@ -70,39 +77,64 @@ void StatusIndicatorSetCellular(cellular_status_t status)
     switch (cellular_status)
     {
         case CELLULAR_STATUS_OFF:
+
             LedOff(LED_QUECTEL);
+
             break;
+
 
         case CELLULAR_STATUS_STARTING:
-            LedOn(LED_QUECTEL);
-            break;
 
-        case CELLULAR_STATUS_SEARCHING:
-        case CELLULAR_STATUS_READY:
-        case CELLULAR_STATUS_TRANSMITTING:
             /*
-             * El patrón será ejecutado por RunStep().
+             * Durante el arranque el LED permanece encendido.
              */
             LedOn(LED_QUECTEL);
+
             break;
 
+
+        case CELLULAR_STATUS_SEARCHING:
+
+        case CELLULAR_STATUS_READY:
+
+        case CELLULAR_STATUS_TRANSMITTING:
+
+            /*
+             * El patrón comienza con el LED encendido.
+             * RunStep() continuará la secuencia.
+             */
+            LedOn(LED_QUECTEL);
+
+            break;
+
+
         default:
+
             LedOff(LED_QUECTEL);
+            current_step = 0;
+
             break;
     }
 }
+
 
 void StatusIndicatorRunStep(void)
 {
     switch (cellular_status)
     {
         case CELLULAR_STATUS_OFF:
+
             LedOff(LED_QUECTEL);
+
             break;
 
+
         case CELLULAR_STATUS_STARTING:
+
             LedOn(LED_QUECTEL);
+
             break;
+
 
         case CELLULAR_STATUS_SEARCHING:
 
@@ -128,6 +160,7 @@ void StatusIndicatorRunStep(void)
 
             break;
 
+
         case CELLULAR_STATUS_READY:
 
             /*
@@ -151,6 +184,7 @@ void StatusIndicatorRunStep(void)
             }
 
             break;
+
 
         case CELLULAR_STATUS_TRANSMITTING:
 
@@ -176,9 +210,21 @@ void StatusIndicatorRunStep(void)
 
             break;
 
+
         default:
+
             LedOff(LED_QUECTEL);
             current_step = 0;
+
             break;
     }
+}
+/**
+ * @brief Obtiene el estado visual actual del módulo celular.
+ *
+ * @return Estado actual del indicador.
+ */
+cellular_status_t StatusIndicatorGetCellular(void)
+{
+    return cellular_status;
 }

@@ -65,7 +65,13 @@ void app_main(void)
     //middleware
     //unity_run_tests_by_tag("[status_indicator]", false);
 
-    unity_run_tests_by_tag("[demo]", false);
+    //unity_run_tests_by_tag("[panic_handler]", false);
+
+    //unity_run_tests_by_tag("[demo]", false);
+
+    //unity_run_tests_by_tag("[combined-test]", false);
+    unity_run_tests_by_tag("[combined-test_]", false);
+
 
     UNITY_END();
 
