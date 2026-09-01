@@ -70,7 +70,16 @@ void app_main(void)
     //unity_run_tests_by_tag("[demo]", false);
 
     //unity_run_tests_by_tag("[combined-test]", false);
-    unity_run_tests_by_tag("[combined-test_]", false);
+    //unity_run_tests_by_tag("[combined-test_]", false);
+    //unity_run_tests_by_tag("[cellular_modem]", false);
+    //unity_run_tests_by_tag("[test_command]", false);
+    //unity_run_tests_by_tag("[test_command_2]", false);
+    //unity_run_tests_by_tag("[test_command_3]", false);
+
+    unity_run_tests_by_tag("[cellular_modem_test]", false);
+
+
+
 
 
     UNITY_END();

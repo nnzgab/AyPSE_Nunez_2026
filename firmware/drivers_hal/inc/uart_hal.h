@@ -26,6 +26,8 @@ void UartHalWriteByte(char tx);
 /** Escribe len bytes; espera a que termine la transmisión */
 int UartHalWriteBytes(const char *buf, size_t len);
 
+void HalDelayMs(uint32_t ms);
+
 #ifdef __cplusplus
 }
 #endif

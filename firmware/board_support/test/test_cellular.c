@@ -1,6 +1,8 @@
 #include "unity.h"
 
 #include "cellular.h"
+#include "cellular_modem.h"
+
 #include "uart_hal.h"
 #include "board_config.h"
 #include <string.h>
@@ -755,7 +757,11 @@ TEST_CASE(
         //CellularCloseTcp(socket_id),
         "No se pudo cerrar el socket TCP"
     );
+    //char response[128];
 
+    TEST_ASSERT_TRUE(CellularModemSendCommand("AT\r\n", response,sizeof(response), 1000));
+
+    TEST_ASSERT_NOT_NULL(strstr(response, "OK"));
     printf(
         "TCP cerrado correctamente.\n"
     );
@@ -788,3 +794,606 @@ TEST_CASE("TEST-BSP-CELLULAR-19 Power off module", "[bsp][cellular][power-off]")
     );
 }
 
+
+TEST_CASE( "CellularModem responds to AT", "[cellular_modem]")
+{
+    char response_[128];
+    bool ok;
+
+    /* Asegurarse que el módem está encendido y listo para AT */
+    TEST_ASSERT_TRUE(CellularModemInit());
+
+    ok = CellularModemSendCommand("AT\r\n", response_, sizeof(response_), 1000);
+
+    TEST_ASSERT_TRUE_MESSAGE(ok, "AT command failed");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(response_, "OK"), "OK not found in response");
+}
+
+TEST_CASE("CellularModem invalid AT returns ERROR", "[cellular_modem]")
+{
+    char response[128];
+
+    //TEST_ASSERT_TRUE(CellularModemInit());
+
+    bool ok = CellularModemSendCommand(
+        "AT+COMANDO_QUE_NO_EXISTE\r\n",
+        response,
+        sizeof(response),
+        1000
+    );
+
+    TEST_ASSERT_FALSE_MESSAGE(ok, "Invalid AT command should fail");
+
+    TEST_ASSERT_NOT_NULL_MESSAGE( strstr(response, "ERROR"), "ERROR not found in response" );
+}
+
+
+
+/******************** */
+
+#include <stdio.h>
+#include <string.h>
+
+/* ============================================================
+ * Datos de prueba: APN del proveedor y servidor TCP de pruebas
+ * ============================================================ */
+
+#define CELLULAR_APN       "datos.personal.com"
+#define CELLULAR_USERNAME  "datos"
+#define CELLULAR_PASSWORD  "datos"
+
+#define CELLULAR_TCP_TEST_SERVER "kkfdu-190-183-23-94.run.pinggy-free.link"
+#define CELLULAR_TCP_TEST_PORT   33291
+
+#define CELLULAR_TEST_PAYLOAD "HOLA MUNDO DESDE EG915U"
+
+typedef struct {
+    const char *label;
+    const char *command;
+    uint32_t    timeout_ms;
+} AtCommandSample_t;
+
+/* ============================================================
+ * Helpers comunes a los tres TEST_CASE
+ * ============================================================ */
+
+/**
+ * Imprime el buffer crudo con \r y \n visibles como texto ("\r","\n")
+ * en lugar de saltos de línea reales, para poder ver exactamente cómo
+ * viene delimitada cada respuesta (blancos, dobles CRLF, prompt sin
+ * CRLF, etc.)
+ */
+static void PrintRawVisible(const char *label, const char *raw, size_t len)
+{
+    printf("---- %s ----\n", label);
+    printf("bytes recibidos: %zu\n", len);
+    printf("crudo: \"");
+    for (size_t i = 0; i < len; i++) {
+        char c = raw[i];
+        if (c == '\r') {
+            printf("\\r");
+        } else if (c == '\n') {
+            printf("\\n");
+        } else if ((c < 32) || (c > 126)) {
+            printf("\\x%02X", (unsigned char)c);
+        } else {
+            putchar(c);
+        }
+    }
+    printf("\"\n");
+}
+
+/**
+ * Manda un comando "normal" (que termina en OK/ERROR) y lo loguea.
+ * NO sirve para AT+QISEND: ese no contesta OK, contesta el prompt
+ * "> " sin CRLF, y CellularModemSendCommand lo clasificaria como
+ * "Unexpected AT response" -> false. Para eso esta SendRawAndWait().
+ */
+static bool RunAtCommand(const char *label, const char *command, uint32_t timeout_ms)
+{
+    char response[256];
+    response[0] = '\0';
+
+    bool ok = CellularModemSendCommand(
+        command,
+        response,
+        sizeof(response),
+        timeout_ms
+    );
+
+    PrintRawVisible(label, response, strlen(response));
+    printf("SendCommand() devolvio: %s\n\n", ok ? "true" : "false");
+
+    return ok;
+}
+
+/**
+ * Version "cruda" sin la evaluacion OK/ERROR de CellularModemSendCommand:
+ * escribe bytes por UART y lee lo que venga, sin juzgar el contenido.
+ * La usamos para el prompt de QISEND y para el payload en si, donde no
+ * hay un "OK" que buscar.
+ *
+ * @param out_len [out] cantidad de bytes leidos (0 si timeout/error)
+ * @return puntero al buffer estatico interno (valido hasta la proxima
+ *         llamada), o NULL si fallo el TX.
+ */
+static char s_raw_buffer[256];
+
+static const char *SendRawAndWait(const char *label, const void *data, size_t data_len, uint32_t timeout_ms, int *out_len)
+{
+    *out_len = 0;
+
+    int written = UartHalWriteBytes((const char *)data, data_len);
+    if (written <= 0) {
+        printf("CELLULAR MODEM: TX crudo fallo (%s)\n", label);
+        return NULL;
+    }
+
+    s_raw_buffer[0] = '\0';
+    int len = UartHalReadBytes(s_raw_buffer, sizeof(s_raw_buffer) - 1, timeout_ms);
+    if (len <= 0) {
+        printf("---- %s ----\n", label);
+        printf("timeout: no llego nada en %lu ms\n\n", timeout_ms);
+        return NULL;
+    }
+
+    s_raw_buffer[len] = '\0';
+    PrintRawVisible(label, s_raw_buffer, (size_t)len);
+    printf("\n");
+
+    *out_len = len;
+    return s_raw_buffer;
+}
+
+/** ¿el buffer termina exactamente en el prompt "> " (sin CRLF)? */
+static bool EndsWithPrompt(const char *buf, size_t len)
+{
+    return (len >= 2U) && (buf[len - 2U] == '>') && (buf[len - 1U] == ' ');
+}
+
+/* ============================================================
+ * TEST_CASE 1: comandos basicos
+ * ============================================================ */
+
+static const AtCommandSample_t kCommandsToProbe[] = {
+    { "AT basico",                 "AT\r\n",                                     2000  },
+    { "Desactivar eco",            "ATE0\r\n",                                   2000  },
+    { "Calidad de señal",          "AT+CSQ\r\n",                                 2000  },
+    { "Registro de red",           "AT+CREG?\r\n",                               2000  },
+    { "IMEI",                      "AT+CGSN\r\n",                                2000  },
+    { "Contexto PDP (consultar)",  "AT+QIACT?\r\n",                              2000  },
+};
+
+#define AT_COMMANDS_TO_PROBE_COUNT (sizeof(kCommandsToProbe) / sizeof(kCommandsToProbe[0]))
+
+TEST_CASE("probar comandos", "[test_command]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+    for (size_t i = 0; i < AT_COMMANDS_TO_PROBE_COUNT; i++) {
+        const AtCommandSample_t *sample = &kCommandsToProbe[i];
+        RunAtCommand(sample->label, sample->command, sample->timeout_ms);
+    }
+}
+
+/* ============================================================
+ * TEST_CASE 2: attach de red + contexto PDP + apertura de socket TCP
+ * ============================================================ */
+
+static const AtCommandSample_t kNetworkAttachCommands[] = {
+    { "SIM lista",              "AT+CPIN?\r\n", 2000 },
+    { "Operador",                "AT+COPS?\r\n", 5000 },
+};
+
+#define AT_NETWORK_ATTACH_COMMANDS_COUNT \
+    (sizeof(kNetworkAttachCommands) / sizeof(kNetworkAttachCommands[0]))
+
+TEST_CASE("probar comandos", "[test_command_2]")
+{
+    //UartHalInit(UART_BAUDRATE);
+
+    char cmd_buffer[192];
+
+    for (size_t i = 0; i < AT_NETWORK_ATTACH_COMMANDS_COUNT; i++) {
+        const AtCommandSample_t *sample = &kNetworkAttachCommands[i];
+        RunAtCommand(sample->label, sample->command, sample->timeout_ms);
+    }
+
+    snprintf(
+        cmd_buffer, sizeof(cmd_buffer),
+        "AT+QICSGP=1,1,\"%s\",\"%s\",\"%s\",1\r\n",
+        CELLULAR_APN, CELLULAR_USERNAME, CELLULAR_PASSWORD
+    );
+    RunAtCommand("Configurar APN (QICSGP)", cmd_buffer, 5000);
+
+    bool pdp_active = RunAtCommand("Activar contexto PDP (QIACT)", "AT+QIACT=1\r\n", 15000);
+
+    RunAtCommand("Confirmar contexto PDP (QIACT?)", "AT+QIACT?\r\n", 2000);
+
+    if (!pdp_active) {
+        TEST_FAIL_MESSAGE("QIACT fallo, revisar APN/usuario/password antes de seguir");
+        return;
+    }
+
+    snprintf(
+        cmd_buffer, sizeof(cmd_buffer),
+        "AT+QIOPEN=1,0,\"TCP\",\"%s\",%d,0,1\r\n",
+        CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT
+    );
+    RunAtCommand("Abrir socket TCP (QIOPEN)", cmd_buffer, 15000);
+
+    RunAtCommand("Cerrar socket (QICLOSE)", "AT+QICLOSE=0\r\n", 10000);
+}
+
+/* ============================================================
+ * TEST_CASE 3: flujo real de envio de datos por TCP (QISEND)
+ * ============================================================
+ * Requiere que el contexto PDP ya haya quedado activo (corriste
+ * [test_command_2] antes, o el contexto persiste entre tests si no
+ * se desactivo). Si AT+QIOPEN falla acá, correlo primero.
+ */
+
+TEST_CASE("probar envio TCP", "[test_command_3]")
+{
+    UartHalInit(UART_BAUDRATE);
+
+    char cmd_buffer[192];
+    int len;
+    const char *resp;
+
+    /* --- Paso 1: abrir el socket --- */
+    snprintf(
+        cmd_buffer, sizeof(cmd_buffer),
+        "AT+QIOPEN=1,0,\"TCP\",\"%s\",%d,0,1\r\n",
+        CELLULAR_TCP_TEST_SERVER, CELLULAR_TCP_TEST_PORT
+    );
+    bool opened = RunAtCommand("Abrir socket TCP (QIOPEN)", cmd_buffer, 15000);
+    if (!opened) {
+        TEST_FAIL_MESSAGE("QIOPEN fallo, no tiene sentido seguir con el envio");
+        return;
+    }
+
+    /* --- Paso 2: pedir el prompt de envio con AT+QISEND=<id>,<len> ---
+     * Esto NO pasa por CellularModemSendCommand porque la respuesta no
+     * es OK/ERROR, es literalmente "> " sin CRLF. */
+    const char *payload = CELLULAR_TEST_PAYLOAD;
+    size_t payload_len = strlen(payload);
+
+    snprintf(cmd_buffer, sizeof(cmd_buffer), "AT+QISEND=0,%zu\r\n", payload_len);
+    printf("CELLULAR MODEM TX: %s", cmd_buffer);
+
+    resp = SendRawAndWait("Prompt de QISEND", cmd_buffer, strlen(cmd_buffer), 5000, &len);
+    if (resp == NULL) {
+        TEST_FAIL_MESSAGE("No llego respuesta a QISEND (ni prompt ni error)");
+        return;
+    }
+    if (!EndsWithPrompt(resp, (size_t)len)) {
+        printf("Se esperaba que termine en '> ' y no fue asi. Revisar si vino ERROR.\n");
+        TEST_FAIL_MESSAGE("QISEND no devolvio el prompt esperado");
+        return;
+    }
+
+    /* --- Paso 3: mandar el payload crudo (sin CRLF final, el modulo
+     * corta solo al llegar a <len> bytes) --- */
+    printf("CELLULAR MODEM TX (payload, %zu bytes): %s\n", payload_len, payload);
+    resp = SendRawAndWait("Confirmacion de envio (SEND OK esperado)", payload, payload_len, 5000, &len);
+    if (resp == NULL) {
+        TEST_FAIL_MESSAGE("Timeout esperando confirmacion del envio");
+        return;
+    }
+    if (strstr(resp, "SEND OK") == NULL) {
+        printf("No se vio 'SEND OK' en la confirmacion, revisar si hubo SEND FAIL.\n");
+    }
+
+    /* --- Paso 4: esperar la URC de datos entrantes. Tu server nc
+     * contesta con el string fijo "ACK", así que deberia llegar
+     * +QIURC: "recv",0 en algun momento. --- */
+    resp = SendRawAndWait("URC recibida tras el envio", "", 0, 8000, &len);
+    if (resp == NULL) {
+        printf("No llego ninguna URC de datos en 8s. Puede que el server tarde mas o no haya contestado.\n");
+    } else if (strstr(resp, "+QIURC: \"recv\"") != NULL) {
+        /* --- Paso 5: leer el dato recibido --- */
+        RunAtCommand("Leer datos recibidos (QIRD)", "AT+QIRD=0,256\r\n", 5000);
+    }
+
+    /* --- Paso 6: cerrar el socket --- */
+    RunAtCommand("Cerrar socket (QICLOSE)", "AT+QICLOSE=0\r\n", 10000);
+}
+
+/* ============================================================
+ * Configuración del test
+ * ============================================================ */
+
+#define CELLULAR_TEST_APN        "datos.personal.com"
+#define CELLULAR_TEST_USERNAME   "datos"
+#define CELLULAR_TEST_PASSWORD   "datos"
+
+#define CELLULAR_TEST_SERVER   "yhopb-190-183-23-94.run.pinggy-free.link"
+
+#define CELLULAR_TEST_PORT       34321
+
+#define CELLULAR_TEST_RX_SIZE    64
+
+/* ============================================================
+ * TEST
+ * ============================================================ */
+
+TEST_CASE("CellularModem test", "[cellular_modem_test]")
+{
+    char imei[32];
+    uint8_t rx_data[CELLULAR_TEST_RX_SIZE];
+    size_t received = 0;
+
+    bool result;
+
+    /* --------------------------------------------------------
+     * 1. Inicialización
+     * -------------------------------------------------------- */
+
+    printf("\n");
+    printf("========================================\n");
+    printf(" TEST CELLULAR MODEM\n");
+    printf("========================================\n");
+
+    printf("\n[1] Inicializando modem...\n");
+
+    UartHalInit(UART_BAUDRATE);
+
+
+    //result = CellularModemInit();
+
+    //TEST_ASSERT_TRUE_MESSAGE(result,"CellularModemInit() fallo");
+
+    printf(
+        "[OK] CellularModemInit()\n"
+    );
+
+    /* --------------------------------------------------------
+     * 2. Verificar que el modem responde
+     * -------------------------------------------------------- */
+
+    printf("\n[2] Verificando modem...\n");
+
+    result = CellularModemIsReady();
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        result,
+        "El modem no responde a AT"
+    );
+
+    printf(
+        "[OK] CellularModemIsReady()\n"
+    );
+
+    /* --------------------------------------------------------
+     * 3. Obtener IMEI
+     * -------------------------------------------------------- */
+
+    printf("\n[3] Obteniendo IMEI...\n");
+
+    memset(
+        imei,
+        0,
+        sizeof(imei)
+    );
+
+    result = CellularModemGetImei(
+        imei,
+        sizeof(imei)
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        result,
+        "No se pudo obtener el IMEI"
+    );
+
+    printf(
+        "IMEI: %s\n",
+        imei
+    );
+
+    /*
+     * Un IMEI normalmente tiene 15 digitos.
+     */
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(
+        15,
+        strlen(imei),
+        "El IMEI no tiene 15 digitos"
+    );
+
+    printf(
+        "[OK] CellularModemGetImei()\n"
+    );
+
+    /* --------------------------------------------------------
+     * 4. Configurar PDP
+     * -------------------------------------------------------- */
+
+    printf("\n[4] Configurando PDP...\n");
+
+    result = CellularModemConfigurePdp(
+        CELLULAR_TEST_APN,
+        CELLULAR_TEST_USERNAME,
+        CELLULAR_TEST_PASSWORD
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        result,
+        "No se pudo configurar el contexto PDP"
+    );
+
+    printf(
+        "[OK] CellularModemConfigurePdp()\n"
+    );
+
+    /* --------------------------------------------------------
+     * 5. Activar PDP
+     * -------------------------------------------------------- */
+
+    printf("\n[5] Activando PDP...\n");
+
+    result = CellularModemActivatePdp();
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        result,
+        "No se pudo activar el contexto PDP"
+    );
+
+    printf(
+        "[OK] CellularModemActivatePdp()\n"
+    );
+
+    /* --------------------------------------------------------
+     * 6. Verificar PDP
+     * -------------------------------------------------------- */
+
+    printf("\n[6] Verificando PDP activo...\n");
+
+    result = CellularModemIsPdpActive();
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        result,
+        "El contexto PDP no esta activo"
+    );
+
+    printf(
+        "[OK] CellularModemIsPdpActive()\n"
+    );
+
+    /* --------------------------------------------------------
+     * 7. Abrir conexion TCP
+     * -------------------------------------------------------- */
+
+    printf("\n[7] Abriendo conexion TCP...\n");
+
+    result = CellularModemOpenTcp(
+        CELLULAR_TEST_SERVER,
+        CELLULAR_TEST_PORT
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        result,
+        "No se pudo abrir la conexion TCP"
+    );
+
+    printf(
+        "[OK] CellularModemOpenTcp()\n"
+    );
+
+    /* --------------------------------------------------------
+     * 8. Enviar trama PANIC + IMEI
+     * -------------------------------------------------------- */
+
+    char frame[64];
+
+    snprintf(
+        frame,
+        sizeof(frame),
+        "PANIC,%s",
+        imei
+    );
+
+    printf(
+        "\n[8] Enviando trama TCP:\n"
+        "    %s\n",
+        frame
+    );
+
+    result = CellularModemSendTcp(
+        (const uint8_t *)frame,
+        strlen(frame)
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        result,
+        "No se pudo enviar la trama TCP"
+    );
+
+    printf(
+        "[OK] CellularModemSendTcp()\n"
+    );
+
+    /* --------------------------------------------------------
+     * 9. Recibir ACK
+     * -------------------------------------------------------- */
+
+    printf(
+        "\n[9] Esperando ACK...\n"
+    );
+
+    memset(
+        rx_data,
+        0,
+        sizeof(rx_data)
+    );
+
+    received = 0;
+
+    result = CellularModemReceiveTcp(
+        rx_data,
+        sizeof(rx_data),
+        &received
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        result,
+        "No se pudieron recibir datos TCP"
+    );
+
+    printf(
+        "Bytes recibidos: %zu\n",
+        received
+    );
+
+    printf(
+        "Respuesta: \"%.*s\"\n",
+        (int)received,
+        rx_data
+    );
+
+    /*
+     * El servidor debe responder ACK.
+     */
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(
+        3,
+        received,
+        "La respuesta no tiene 3 bytes"
+    );
+
+    TEST_ASSERT_EQUAL_MEMORY_MESSAGE(
+        "ACK",
+        rx_data,
+        3,
+        "La respuesta recibida no es ACK"
+    );
+
+    printf(
+        "[OK] ACK recibido correctamente\n"
+    );
+
+    /* --------------------------------------------------------
+     * 10. Cerrar TCP
+     * -------------------------------------------------------- */
+
+    printf("\n[10] Cerrando conexion TCP...\n");
+
+    result = CellularModemCloseTcp();
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        result,
+        "No se pudo cerrar el socket TCP"
+    );
+
+    printf(
+        "[OK] CellularModemCloseTcp()\n"
+    );
+
+    /* --------------------------------------------------------
+     * Resultado
+     * -------------------------------------------------------- */
+
+    printf("\n");
+    printf("========================================\n");
+    printf(" CELLULAR MODEM TEST: PASS\n");
+    printf("========================================\n");
+}

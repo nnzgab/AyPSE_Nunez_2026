@@ -110,3 +110,8 @@ int UartHalWriteBytes(const char *buf, size_t len)
     uart_wait_tx_done(UART_HAL_NUM, pdMS_TO_TICKS(200));
     return w; // Devuelve la cantidad real
 }
+
+void HalDelayMs(uint32_t ms)
+{
+    vTaskDelay(pdMS_TO_TICKS(ms));
+}

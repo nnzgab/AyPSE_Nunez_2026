@@ -19,8 +19,8 @@
 //#define CELLULAR_TCP_TEST_PORT   4242
 //nsjfz-190-183-23-94.run.pinggy-free.link:38577
 
-#define CELLULAR_TCP_TEST_SERVER "nsjfz-190-183-23-94.run.pinggy-free.link"
-#define CELLULAR_TCP_TEST_PORT   38577
+#define CELLULAR_TCP_TEST_SERVER "kkfdu-190-183-23-94.run.pinggy-free.link"
+#define CELLULAR_TCP_TEST_PORT   33291
    
 
 /*==================[external functions declaration]=========================*/

@@ -1,7 +1,10 @@
 idf_build_get_property(target IDF_TARGET)
 
 # Always compiled source files
-set(srcs "src/led.c" "src/panic_button.c" "src/cellular.c"
+set(srcs    "src/led.c" 
+            "src/panic_button.c" 
+            "src/cellular.c"
+            "src/cellular_modem.c"
     )
 
 # Always included headers
