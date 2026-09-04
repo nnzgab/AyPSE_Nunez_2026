@@ -13,29 +13,44 @@ static cellular_net_status_t net_status = NET_STATUS_DISCONNECTED;
 
 esp_err_t CellularNetInit(void)
 {
+    char response[32];
+
     /*
-     * La inicialización del hardware y el encendido
-     * del módem pertenecen a cellular_modem. Inicializa el hardware y espera el RDY del arranque.
+     * 1. Verificación previa: comprobamos si el módem ya estaba encendido 
+     * enviando un "AT" directo mediante la función genérica disponible.
+     */
+    if (CellularModemSendCommand("AT\r\n", response, sizeof(response), 500))
+    {
+        // Si responde, podemos asumir que ya está listo o verificar su estado real
+        if (CellularModemIsReady())
+        {
+            net_status = NET_STATUS_DISCONNECTED;
+            return ESP_OK;
+        }
+    }
+
+    /*
+     * 2. Si no respondió o no está listo, ejecutamos la inicialización 
+     * de hardware y la espera del "RDY" de arranque.
      */
     if (!CellularModemInit())
     {
         net_status = NET_STATUS_DISCONNECTED;
         return ESP_FAIL;
     }
+
     /*
-     * 2. Verificación activa: le manda un "AT" al módem 
-     * para confirmar que responde y está listo para operar.
+     * 3. Verificación final tras la secuencia de inicio de hardware.
      */
     if (!CellularModemIsReady())
-        {
-            net_status = NET_STATUS_DISCONNECTED;
-            return ESP_ERR_TIMEOUT;
-        }
-
+    {
         net_status = NET_STATUS_DISCONNECTED;
-
-        return ESP_OK;
+        return ESP_ERR_TIMEOUT;
     }
+
+    net_status = NET_STATUS_DISCONNECTED;
+    return ESP_OK;
+}
 
 
 

@@ -79,8 +79,10 @@ void app_main(void)
     //unity_run_tests_by_tag("[cellular_modem_test]", false);
     
     //unity_run_tests_by_tag("[cellular_net]", false);
-    unity_run_tests_by_tag("[cellular+led+boton]", false);
-    //unity_run_tests_by_tag("[power-off]", false);
+    //unity_run_tests_by_tag("[cellular+led+boton]", false);
+    //unity_run_tests_by_tag("[prueba_frame]", false);
+    //unity_run_tests_by_tag("[fullfull]", false);
+    unity_run_tests_by_tag("[power-off]", false);
 
 
 
