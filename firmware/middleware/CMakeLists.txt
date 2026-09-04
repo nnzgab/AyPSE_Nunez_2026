@@ -5,6 +5,7 @@ set(srcs
     "src/event_frame.c"
     "src/status_indicator.c"
     "src/panic_handler.c"
+    "src/cellular_net.c"
     )
 
 # Always included headers

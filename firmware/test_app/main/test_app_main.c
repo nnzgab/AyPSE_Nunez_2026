@@ -59,7 +59,7 @@ void app_main(void)
     //unity_run_tests_by_tag("[send_]", false);
 
     unity_run_tests_by_tag("[receivetcp_]", false);
-//
+
     unity_run_tests_by_tag("[power-off]", false);
 */
     //middleware
@@ -76,7 +76,11 @@ void app_main(void)
     //unity_run_tests_by_tag("[test_command_2]", false);
     //unity_run_tests_by_tag("[test_command_3]", false);
 
-    unity_run_tests_by_tag("[cellular_modem_test]", false);
+    //unity_run_tests_by_tag("[cellular_modem_test]", false);
+    
+    //unity_run_tests_by_tag("[cellular_net]", false);
+    unity_run_tests_by_tag("[cellular+led+boton]", false);
+    //unity_run_tests_by_tag("[power-off]", false);
 
 
 

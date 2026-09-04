@@ -550,8 +550,27 @@ bool CellularModemConfigurePdp(
         return false;
     }
 
-    char command[192];
+    
     char response[256];
+    /*
+     * Si el contexto ya quedó activo de una ejecución anterior,
+     * lo desactivamos para poder reconfigurar el APN.
+     */
+    if (CellularModemIsPdpActive())
+    {
+        printf("CELLULAR MODEM: PDP active, deactivating before config...\n");
+        
+        if (!CellularModemSendCommand(
+                "AT+QIDEACT=1\r\n",
+                response,
+                sizeof(response),
+                10000))
+        {
+            return false;
+        }
+    }
+    
+    char command[192];
 
     snprintf(
         command,
@@ -972,15 +991,22 @@ bool CellularModemReceiveTcp(
 
     *received = 0;
 
-    // ✅ Faltaba declarar este buffer
     char response[CELLULAR_RX_BUFFER_SIZE];
 
     /*
-     * Si los datos ya llegaron junto con la URC,
-     * devolverlos directamente.
+     * ========================================================
+     * CASO 1:
+     * Ya tenemos datos almacenados previamente.
+     * ========================================================
      */
     if (s_rx_data_length > 0)
     {
+        printf(
+            "CELLULAR MODEM: Returning buffered RX data "
+            "(%zu bytes)\n",
+            s_rx_data_length
+        );
+
         if (s_rx_data_length > data_size)
         {
             printf(
@@ -998,68 +1024,123 @@ bool CellularModemReceiveTcp(
 
         *received = s_rx_data_length;
 
+        s_rx_data_length = 0;
         s_rx_data_pending = false;
         s_rx_bytes_pending = 0;
-        s_rx_data_length = 0;
-
-        printf(
-            "CELLULAR MODEM: RX data returned directly "
-            "(%zu bytes)\n",
-            *received
-        );
 
         return true;
     }
 
     /*
-     * Paso 1: verificar si ya sabemos que hay datos.
+     * ========================================================
+     * CASO 2:
+     * No tenemos datos. Esperamos una URC por el UART.
+     * ========================================================
      */
-    if (!s_rx_data_pending)
+    printf(
+        "CELLULAR MODEM: Waiting for RX URC...\n"
+    );
+
+    int len = UartHalReadBytes(
+        response,
+        sizeof(response) - 1,
+        CELLULAR_TCP_TIMEOUT_MS
+    );
+
+    if (len <= 0)
     {
-        int len = UartHalReadBytes(
-            response,
-            sizeof(response) - 1,
-            CELLULAR_TCP_TIMEOUT_MS
-        );
-
-        if (len <= 0)
-        {
-            printf(
-                "CELLULAR MODEM: Receive timeout\n"
-            );
-
-            return false;
-        }
-
-        response[len] = '\0';
-
         printf(
-            "CELLULAR MODEM RX: %s\n",
-            response
+            "CELLULAR MODEM: Receive timeout\n"
         );
 
-        if (!CellularModemProcessReceiveUrc(response))
-        {
-            printf(
-                "CELLULAR MODEM: No receive URC found\n"
-            );
+        return false;
+    }
 
-            return false;
-        }
+    response[len] = '\0';
+
+    printf(
+        "CELLULAR MODEM RX: %s\n",
+        response
+    );
+
+    /*
+     * Procesar URC.
+     */
+    if (!CellularModemProcessReceiveUrc(response))
+    {
+        printf(
+            "CELLULAR MODEM: No receive URC found\n"
+        );
+
+        return false;
     }
 
     /*
-     * Paso 2: sabemos cuántos bytes hay.
+     * ========================================================
+     * CASO 3:
+     * La URC ya traía los datos empaquetados junto a ella.
+     * ========================================================
      */
+    if (s_rx_data_length > 0)
+    {
+        printf(
+            "CELLULAR MODEM: URC contained RX data "
+            "(%zu bytes)\n",
+            s_rx_data_length
+        );
+
+        if (s_rx_data_length > data_size)
+        {
+            printf(
+                "CELLULAR MODEM: RX buffer too small\n"
+            );
+
+            return false;
+        }
+
+        memcpy(
+            data,
+            s_rx_data_buffer,
+            s_rx_data_length
+        );
+
+        *received = s_rx_data_length;
+
+        s_rx_data_length = 0;
+        s_rx_data_pending = false;
+        s_rx_bytes_pending = 0;
+
+        return true;
+    }
+
+    /*
+     * ========================================================
+     * CASO 4:
+     * La URC solamente informó que hay datos pendientes.
+     * Ahora procedemos a leerlos usando QIRD.
+     * ========================================================
+     */
+    if (!s_rx_data_pending)
+    {
+        printf(
+            "CELLULAR MODEM: No pending RX data\n"
+        );
+
+        return false;
+    }
+
+    printf(
+        "CELLULAR MODEM: RX data pending, "
+        "using QIRD (%zu bytes)\n",
+        s_rx_bytes_pending
+    );
+
     size_t bytes_to_read = s_rx_bytes_pending;
     if (bytes_to_read > data_size)
     {
         bytes_to_read = data_size;
     }
 
-    /*
-     * Paso 3: QIRD
-     */
     char command[64];
     snprintf(
         command,
@@ -1088,7 +1169,7 @@ bool CellularModemReceiveTcp(
         command
     );
 
-    int len = UartHalReadBytes(
+    len = UartHalReadBytes(
         response,
         sizeof(response) - 1,
         5000
@@ -1179,7 +1260,6 @@ bool CellularModemReceiveTcp(
 
     return true;
 }
-
 /* ============================================================
  * TCP - Close
  * ============================================================ */

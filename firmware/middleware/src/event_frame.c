@@ -4,9 +4,11 @@
 #include <string.h>
 
 #define MAX_TCP_RETRIES     10
-#define SERVER_HOST         "192.168.1.100"
-#define SERVER_PORT         5000
-#define BACKUP_PHONE        "+5493794000000" /* Número de destino por SMS */
+//#define SERVER_HOST         "192.168.1.100"
+//#define SERVER_PORT         5000
+#define SERVER_HOST         "nzmgf-190-183-23-94.run.pinggy-free.link"
+#define SERVER_PORT         40309
+//#define BACKUP_PHONE        "+5493794000000" /* Número de destino por SMS */
 
 static uint32_t calculate_crc32(const uint8_t *data, size_t length) {
     uint32_t crc = 0xFFFFFFFF;
