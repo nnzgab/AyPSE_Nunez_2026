@@ -12,8 +12,8 @@
  * |:----------:|:-----------------------------------------------|
  * | 04/09/2026 | Document creation                              |
  *
- * @author Gabriel Eduardo Núñez (gabriel.nunez@ingenieria.uner.edu.ar)
- *
+ * @author Gabriel Eduardo Núñez (nunezgabrieleduardo@gmail.com) *
+ * 
  */
 
 /*==================[inclusions]=============================================*/
