@@ -88,7 +88,10 @@ static void UpdateStatusLedFromNetwork(void) {
             break;
 
         case CELL_STATE_READY:
-            StatusIndicator_SetCellular(CELLULAR_STATUS_READY);
+            /* Solo actualizar a READY si no se está ejecutando una ráfaga de TRANSMITTING activa */
+            if (StatusIndicator_GetCellular() != CELLULAR_STATUS_TRANSMITTING) {
+                StatusIndicator_SetCellular(CELLULAR_STATUS_READY);
+            }
             if (!s_ready_announced) {
                 s_ready_announced = true;
                 printf("\n==================================================\n");

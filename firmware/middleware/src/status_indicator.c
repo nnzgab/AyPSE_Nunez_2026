@@ -5,11 +5,11 @@
 
 /*==================[macros and definitions]==================================*/
 /* Tiempos exactos originales en milisegundos */
-#define SEARCHING_ON_MS       200U
-#define SEARCHING_OFF_MS      1800U
+#define SEARCHING_ON_MS       900U//200U
+#define SEARCHING_OFF_MS      100U//1800U
 
-#define READY_ON_MS           250U//500U//1800U
-#define READY_OFF_MS          250U//500U//200U
+#define READY_ON_MS           100U//500U//1800U
+#define READY_OFF_MS          900U//500U//200U
 
 #define TRANSMITTING_ON_MS    125U
 #define TRANSMITTING_OFF_MS   125U

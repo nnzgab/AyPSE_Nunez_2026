@@ -1,6 +1,7 @@
 #include "cellular_net.h"
 #include "cellular_modem.h"
 #include "event_frame.h"
+#include "status_indicator.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -14,8 +15,8 @@
 #define APN_USER                "datos"
 #define APN_PASS                "datos"
 
-#define SERVER_IP               "xbkcp-190-183-23-94.run.pinggy-free.link"
-#define SERVER_PORT             45241
+#define SERVER_IP               "yrjik-190-183-23-94.run.pinggy-free.link"
+#define SERVER_PORT             32865
 #define SOCKET_PROTO            "TCP"
 
 #define QUEUE_LENGTH            5
@@ -141,7 +142,7 @@ static void CellularNet_FsmStep(void) {
         break;
 
     case CELL_STATE_ERROR:
-        printf("[CELL_NET] En estado de error (reintentos: %u). Pausa pasiva de 5s...\n", g_net_status.consecutive_errors);
+        printf("[CELL_NET] En estado de error (fallos acumulados: %u). Pausa pasiva de 5s...\n", g_net_status.consecutive_errors);
         vTaskDelay(pdMS_TO_TICKS(5000));
         // Volver a STARTING donde primero probará AT sin forzar apagado duro
         g_net_status.state = CELL_STATE_STARTING;
@@ -153,25 +154,54 @@ static void CellularNet_FsmStep(void) {
 }
 
 /* ============================================================================
- *  Transmisión de Trama por Socket TCP
+ *  Transmisión de Trama por Socket TCP (con Indicación Visual TRANSMITTING)
  * ============================================================================ */
 static bool CellularNet_TransmitFrame(const uint8_t *payload, uint16_t length) {
     bool tx_ok = false;
 
+    /* 🟢 Activar ráfaga visual rápida de transmisión en LED QUECTEL (125ms ON / 125ms OFF) */
+    StatusIndicator_SetCellular(CELLULAR_STATUS_TRANSMITTING);
+
+    printf("[CELL_NET] Trama desapilada de la cola (%u bytes). Intentando abrir socket TCP (%s %s:%u)...\n",
+           length, SOCKET_PROTO, SERVER_IP, SERVER_PORT);
+
     if (CellularModemSocketOpen(SOCKET_PROTO, SERVER_IP, SERVER_PORT)) {
+        printf("[CELL_NET] Socket TCP abierto con éxito (AT+QIOPEN=1,0). Transmitiendo datos...\n");
+        
         if (CellularModemSocketSend(payload, length)) {
+            printf("[CELL_NET] Datos enviados correctamente (SEND OK). Verificando respuesta del servidor...\n");
+            
             uint8_t rx_buffer[64];
             uint16_t rx_bytes = 0;
 
             if (CellularModemSocketReceive(rx_buffer, sizeof(rx_buffer) - 1, &rx_bytes) && rx_bytes > 0) {
                 rx_buffer[rx_bytes] = '\0';
+                printf("[CELL_NET] Respuesta recibida del servidor (%u bytes): %s\n", rx_bytes, rx_buffer);
                 tx_ok = true;
             } else {
+                printf("[CELL_NET] Transmisión exitosa (confirmación implícita tras SEND OK).\n");
                 tx_ok = true; // Confirmación implícita tras Send OK
             }
+        } else {
+            printf("[CELL_NET] [ERROR TX] Falló la transmisión de datos por socket TCP (AT+QISEND).\n");
         }
+        
         CellularModemSocketClose();
+        printf("[CELL_NET] Socket TCP cerrado (AT+QICLOSE=0).\n");
+    } else {
+        printf("[CELL_NET] [ERROR SOCKET] Falló la apertura del socket TCP (AT+QIOPEN). Servidor inalcanzable o timeout.\n");
     }
+
+    if (!tx_ok) {
+        printf("[CELL_NET] [TX FALLIDA] Fallo de envío registrado. Contador de errores: %u/%u\n",
+               g_net_status.consecutive_errors + 1, MAX_CONSECUTIVE_ERRORS);
+    } else {
+        printf("[CELL_NET] [TX EXITOSA] Alerta entregada a la red y socket cerrado correctamente.\n");
+    }
+
+    /* 🟢 Restablecer indicación visual de reposo READY (500ms ON / 500ms OFF) */
+    StatusIndicator_SetCellular(CELLULAR_STATUS_READY);
+
     return tx_ok;
 }
 
@@ -193,6 +223,8 @@ static void CellularNet_TaskRoutine(void *pvParameters) {
                     g_net_status.consecutive_errors++;
                     
                     if (g_net_status.consecutive_errors >= MAX_CONSECUTIVE_ERRORS) {
+                        printf("[CELL_NET] Se alcanzó el límite máximo de errores (%u/%u). Transicionando a CELL_STATE_ERROR...\n",
+                               g_net_status.consecutive_errors, MAX_CONSECUTIVE_ERRORS);
                         g_net_status.state = CELL_STATE_ERROR;
                     }
                 }
