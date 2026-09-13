@@ -8,8 +8,8 @@
 #define SEARCHING_ON_MS       200U
 #define SEARCHING_OFF_MS      1800U
 
-#define READY_ON_MS           1800U
-#define READY_OFF_MS          200U
+#define READY_ON_MS           250U//500U//1800U
+#define READY_OFF_MS          250U//500U//200U
 
 #define TRANSMITTING_ON_MS    125U
 #define TRANSMITTING_OFF_MS   125U

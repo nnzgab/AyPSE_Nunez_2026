@@ -8,7 +8,7 @@ typedef enum {
     CELLULAR_STATUS_OFF = 0,
     CELLULAR_STATUS_STARTING,
     CELLULAR_STATUS_SEARCHING,     /* 200 ms ON  / 1800 ms OFF */
-    CELLULAR_STATUS_READY,         /* 1800 ms ON / 200 ms OFF  */
+    CELLULAR_STATUS_READY,         /* 500 ms ON / 500 ms OFF  */ /* 1800 ms ON / 200 ms OFF  */
     CELLULAR_STATUS_TRANSMITTING   /* 125 ms ON  / 125 ms OFF  */
 } cellular_status_t;
 

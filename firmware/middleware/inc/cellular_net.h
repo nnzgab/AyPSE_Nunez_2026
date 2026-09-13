@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #define MAX_ALERT_PAYLOAD_SIZE  64
 
@@ -48,6 +49,14 @@ cellular_net_status_t CellularNet_GetStatus(void);
  * @brief Indica si la red está en READY para transmitir.
  */
 bool CellularNet_IsReady(void);
+
+/**
+ * @brief Obtiene el IMEI real del módem leído de forma segura por la tarea de red.
+ * @param imei_out Buffer donde se copiarán los 15 dígitos ASCII + '\0'.
+ * @param max_len Tamaño del buffer (debe ser >= 16).
+ * @return true si el IMEI ya fue leído correctamente del hardware, false si usa fallback.
+ */
+bool CellularNet_GetIMEI(char *imei_out, size_t max_len);
 
 /* 
  * TODO: Funciones pendientes de incorporación a la API pública
