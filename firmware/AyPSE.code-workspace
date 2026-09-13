@@ -1,13 +1,7 @@
 {
     "folders": [
         {
-            "path": "./apps/0_blinking"
-        },
-        {
             "path": "./test_app"
-        },
-        {
-            "path": "./apps/x_template"
         },
         {
             "path": "./middleware"
