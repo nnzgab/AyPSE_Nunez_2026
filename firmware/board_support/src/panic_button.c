@@ -1,195 +1,68 @@
+/*==================[inclusions]=============================================*/
 #include "panic_button.h"
-
-#include "gpio_hal.h"
 #include "board_config.h"
+#include "gpio_hal.h"
+#include "gptimer_hal.h"
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+/*==================[macros and definitions]==================================*/
+#define PANIC_DEBOUNCE_MS  30U
 
+/*==================[internal data definition]=================================*/
+static panic_button_isr_cb_t user_cb = NULL;
+static void *user_arg = NULL;
+static volatile uint32_t last_event_ms = 0;
 
-/*==================[macros and definitions]===============================*/
-
-#define PANIC_BUTTON_DEBOUNCE_MS    30
-
-/*==================[internal data declaration]============================*/
-
-static TaskHandle_t panic_button_task_handle = NULL;
-
-static volatile bool panic_button_event = false;
-
-static bool panic_button_initialized = false;
-
-
-/*==================[internal functions declaration]========================*/
-
-static void PanicButtonISR(void *args);
-
-static void PanicButtonTask(void *args);
-
-
-/*==================[internal functions definition]=========================*/
+/*==================[internal functions definition]==============================*/
 
 /**
- * @brief Rutina de atención de interrupción del botón.
+ * @brief ISR interna del pulsador de pánico.
  *
- * Se ejecuta en contexto de interrupción.
- * No realiza debounce ni procesamiento complejo.
+ * Aplica debounce por comparación de timestamps (resta con wraparound,
+ * válida aun si GpTimerGetMs() da la vuelta) y, si corresponde, invoca el
+ * callback del usuario. Debe mantenerse corta: no hace nada más que esto.
  */
-static void PanicButtonISR(void *args)
+static void PanicButtonInternalIsr(void *arg)
 {
-    BaseType_t higher_priority_task_woken = pdFALSE;
+    uint32_t now = GpTimerGetMs();
 
-    vTaskNotifyGiveFromISR(
-        panic_button_task_handle,
-        &higher_priority_task_woken
-    );
+    if ((now - last_event_ms) < PANIC_DEBOUNCE_MS) {
+        return; /* rebote dentro de la ventana de debounce: se descarta */
+    }
+    last_event_ms = now;
 
-    if (higher_priority_task_woken)
-    {
-        portYIELD_FROM_ISR();
+    if (user_cb != NULL) {
+        user_cb(user_arg);
     }
 }
 
-
-/**
- * @brief Tarea encargada del debounce del botón.
- */
-static void PanicButtonTask(void *args)
-{
-    TickType_t last_event_time = 0;
-
-    while (1)
-    {
-        /*
-         * Esperamos hasta que la ISR nos notifique
-         * que ocurrió una interrupción.
-         */
-        ulTaskNotifyTake(
-            pdTRUE,
-            portMAX_DELAY
-        );
-
-        TickType_t current_time = xTaskGetTickCount();
-
-        /*
-         * Debounce temporal.
-         */
-        if ((current_time - last_event_time) >=
-            pdMS_TO_TICKS(PANIC_BUTTON_DEBOUNCE_MS))
-        {
-            /* Esperamos 10ms a que pase el caos eléctrico del rebote (flancos falsos al soltar) */
-            vTaskDelay(pdMS_TO_TICKS(10));
-
-            /* Verificamos si el botón SIGUE físicamente presionado */
-            if (PanicButtonIsPressed()) 
-            {
-                last_event_time = xTaskGetTickCount();
-
-                /*
-                 * Se registra un evento para la aplicación.
-                 */
-                panic_button_event = true;
-            }
-        }
-    }
-}
-
-
-/*==================[external functions definition]=========================*/
-
+/*==================[external functions definition]=============================*/
 bool PanicButtonInit(void)
 {
-    /* 
-     * SIEMPRE limpiamos el estado al inicializar, 
-     * para no arrastrar eventos fantasmas de ejecuciones anteriores. 
-     */
-    panic_button_event = false;
-    /*
-     * Configuración del GPIO del botón.
-     *
-     * GPIO23 utiliza el pull-up definido en el HAL.
-     *
-     * Estado:
-     *
-     *   botón liberado  -> HIGH
-     *   botón presionado -> LOW
-     */
-    /* Si ya fue inicializado, no crear otra tarea ni registrar otra ISR */
-    if (panic_button_initialized)
-    {
-        return true;
-    }
-    
-    /*
-     * 1. Configuramos GPIO23 como entrada.
-     */
-    GPIOInit(
-        GPIO_PANIC_BTN,
-        GPIO_INPUT
-    );
+    GPIOInit(GPIO_PANIC_BTN, GPIO_INPUT);
 
-    /* Estado inicial conocido */
-    panic_button_event = false;
-
-    /*
-     * 2. Creamos la tarea que procesará
-     *    las notificaciones provenientes de la ISR.
-     */
-    if (xTaskCreate(
-            PanicButtonTask,
-            "panic_button_task",
-            2048,
-            NULL,
-            5,
-            &panic_button_task_handle
-        ) != pdPASS)
-    {
-        return false;
-    }
-
-    /*
-     * Activamos la interrupción por flanco descendente.
-     *
-     * El botón utiliza pull-up:
-     *
-     *       liberado = 1
-     *       presionado = 0
-     *
-     * Por eso detectamos HIGH -> LOW.
-     */
-    GPIOActivInt(
-        GPIO_PANIC_BTN,
-        GPIO_INT_FALLING,
-        PanicButtonISR,
-        NULL
-    );
-
-    /* Actualizamos la bandera para evitar inicializaciones múltiples */
-    panic_button_initialized = true;
-
-    return true;
+    return (GpTimerInit() == HAL_GPTIMER_OK);
 }
-
 
 bool PanicButtonIsPressed(void)
 {
-    /*
-     * El botón es activo en LOW.
-     */
-    return !GPIORead(GPIO_PANIC_BTN);
+    return !GPIORead(GPIO_PANIC_BTN); /* activo en bajo */
+}
+
+void PanicButtonAttachInterrupt(panic_button_isr_cb_t cb, void *arg)
+{
+    user_cb = cb;
+    user_arg = arg;
+
+    GPIOActivInt(GPIO_PANIC_BTN, GPIO_INT_FALLING, PanicButtonInternalIsr, NULL);
 }
 
 
-bool PanicButtonPressedEvent(void)
+void PanicButtonDetachInterrupt(void)
 {
-    if (panic_button_event)
-    {
-        panic_button_event = false;
-
-        return true;
-    }
-
-    return false;
+    GPIODeactivInt(GPIO_PANIC_BTN);
+ 
+    user_cb = NULL;
+    user_arg = NULL;
 }
 
 

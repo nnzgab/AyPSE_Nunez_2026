@@ -1,1286 +1,407 @@
 #include "cellular_modem.h"
+#include <string.h>
+#include <stdio.h>
 
+
+#include "gpio_hal.h"
 #include "uart_hal.h"
 #include "board_config.h"
 
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
+#define PWRKEY_STABILIZATION_MS  31U
+#define PWRKEY_PULSE_TIME_MS     2100U
 
-/* ============================================================
- * Configuración interna
- * ============================================================ */
-
-#define CELLULAR_AT_TIMEOUT_MS              1000
-#define CELLULAR_BOOT_WAIT_MS               5000
-
-#define CELLULAR_PWRKEY_STABILIZATION_MS    31
-#define CELLULAR_PWRKEY_PULSE_ON_TIME_MS    2100
-
-#define CELLULAR_SOCKET_ID                  0
-
-#define CELLULAR_RX_BUFFER_SIZE             512
-
-#define CELLULAR_TCP_TIMEOUT_MS             15000
-
-/* ============================================================
- * Estado interno
- * ============================================================ */
-
-/*
- * Si durante CellularModemSendTcp() llega también una URC
- * +QIURC: "recv", la guardamos para que ReceiveTcp() pueda
- * procesarla posteriormente.
- *
- * No es una cola ni un parser complejo.
- * Para este proyecto solamente necesitamos recordar
- * que hay datos disponibles en el socket.
- */
-static bool s_rx_data_pending = false;
-static size_t s_rx_bytes_pending = 0;
-
-static uint8_t s_rx_data_buffer[256];
-static size_t s_rx_data_length = 0;
+#define PWRKEY_OFF_TIME_MS       3200U
+#define PWRKEY_OFF_PULSE_MS      5000U
 
 
-/* ============================================================
- * Funciones privadas
- * ============================================================ */
-
-static bool CellularModemPowerOn(void);
-
-static bool CellularModemWaitFor(
-    const char *expected,
-    char *response,
-    size_t response_size,
-    uint32_t timeout_ms
-);
-
-static bool CellularModemProcessReceiveUrc(
-    const char *response
-);
-
-/* ============================================================
- * Inicialización
- * ============================================================ */
+/* ============================================================================
+ * 1. Inicialización y Control de Alimentación
+ * ============================================================================ */
 
 bool CellularModemInit(void)
 {
     UartHalInit(UART_BAUDRATE);
-    printf("CELLULAR MODEM: UART initialized\n");
-    GPIOInit(QUECTEL_PWRKEY_PIN, GPIO_OUTPUT);
-    GPIOOff(QUECTEL_PWRKEY_PIN);
-
-    if (!CellularModemPowerOn())
-    {
-        printf(
-            "CELLULAR MODEM: Power on failed\n"
-        );
-
-        return false;
-    }
-
-    if (!CellularModemWaitReady(CELLULAR_BOOT_WAIT_MS))
-    {
-        printf(
-            "CELLULAR MODEM: Modem not ready\n"
-        );
-
-        return false;
-    }
-
-    printf(
-        "CELLULAR MODEM: Initialization complete\n"
+    GPIOInit(
+        QUECTEL_PWRKEY_PIN,
+        GPIO_OUTPUT
     );
-
+    GPIOOff(QUECTEL_PWRKEY_PIN);
     return true;
 }
 
-/* ============================================================
- * Power
- * ============================================================ */
-
-static bool CellularModemPowerOn(void)
+void CellularModemPowerPulse(void)
 {
     GPIOOff(QUECTEL_PWRKEY_PIN);
-    HalDelayMs(CELLULAR_PWRKEY_STABILIZATION_MS);
+    HalDelayMs(PWRKEY_STABILIZATION_MS);
     GPIOOn(QUECTEL_PWRKEY_PIN);
-    HalDelayMs(CELLULAR_PWRKEY_PULSE_ON_TIME_MS);
+    HalDelayMs(PWRKEY_PULSE_TIME_MS);
+    GPIOOff(QUECTEL_PWRKEY_PIN);
+}
+
+bool CellularModemHardPowerOff(void)
+{
+    GPIOInit(
+        QUECTEL_PWRKEY_PIN,
+        GPIO_OUTPUT
+    );
+    GPIOOff(QUECTEL_PWRKEY_PIN);
+    HalDelayMs(PWRKEY_OFF_TIME_MS);
+    GPIOOn(QUECTEL_PWRKEY_PIN);
+    HalDelayMs(PWRKEY_OFF_PULSE_MS);
     GPIOOff(QUECTEL_PWRKEY_PIN);
     return true;
 }
 
-/* ============================================================
- * Estado
- * ============================================================ */
-
-bool CellularModemWaitReady(uint32_t timeout_ms)
+bool CellularModemWaitBoot(uint32_t timeout_ms)
 {
-    char response[CELLULAR_RX_BUFFER_SIZE];
+    char response[128];
+    int len = UartHalReadBytes(response, sizeof(response) - 1, timeout_ms);
 
-    int len = UartHalReadBytes(
-        response,
-        sizeof(response) - 1,
-        timeout_ms
-    );
-
-    if (len <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: RDY timeout\n"
-        );
-
+    if (len <= 0) {
         return false;
     }
 
     response[len] = '\0';
-
-    printf(
-        "CELLULAR MODEM RX: %s\n",
-        response
-    );
-
-    if (strstr(response, "RDY") != NULL)
-    {
-        printf(
-            "CELLULAR MODEM: RDY received\n"
-        );
-
-        return true;
-    }
-
-    printf(
-        "CELLULAR MODEM: RDY not found\n"
-    );
-
-    return false;
+    return (strstr(response, "RDY") != NULL);
 }
 
+
+/* ============================================================================
+ * 2. Estado del Módem y Registro de Red
+ * ============================================================================ */
 
 bool CellularModemIsReady(void)
 {
+    char response[64];
+    
+    // Limpiamos basura en buffer antes de enviar
+    UartHalWriteBytes("AT\r\n", 4);
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 1000);
+
+    if (len <= 0) {
+        return false;
+    }
+
+    response[len] = '\0';
+    return (strstr(response, "OK") != NULL);
+}
+
+bool CellularModemIsSimReady(void)
+{
     char response[128];
 
-    return CellularModemSendCommand(
-        "AT\r\n",
-        response,
-        sizeof(response),
-        CELLULAR_AT_TIMEOUT_MS
-    );
-}
+    // Consulta el estado de la SIM
+    UartHalWriteBytes("AT+CPIN?\r\n", 10);
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 3000);
 
-/* ============================================================
- * AT command
- * ============================================================ */
-
-bool CellularModemSendCommand(
-    const char *command,
-    char *response,
-    size_t response_size,
-    uint32_t timeout_ms
-)
-{
-    if (command == NULL ||
-        response == NULL ||
-        response_size == 0)
-    {
-        return false;
-    }
-
-    response[0] = '\0';
-
-    /*
-     * --------------------------------------------------------
-     * TX
-     * --------------------------------------------------------
-     */
-
-    int written = UartHalWriteBytes(
-        command,
-        strlen(command)
-    );
-
-    if (written <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: TX failed: %s",
-            command
-        );
-
-        return false;
-    }
-
-    printf(
-        "CELLULAR MODEM TX: %s",
-        command
-    );
-
-    /*
-     * --------------------------------------------------------
-     * RX
-     * --------------------------------------------------------
-     */
-
-    int len = UartHalReadBytes(
-        response,
-        response_size - 1,
-        timeout_ms
-    );
-
-    if (len <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: RX timeout\n"
-        );
-
+    if (len <= 0) {
         return false;
     }
 
     response[len] = '\0';
 
-    printf(
-        "CELLULAR MODEM RX: %s\n",
-        response
-    );
-
-    /*
-     * Si durante la respuesta apareció una URC de recepción,
-     * no la descartamos.
-     */
-    CellularModemProcessReceiveUrc(response);
-
-    /*
-     * ERROR tiene prioridad sobre OK.
-     */
-    if (strstr(response, "ERROR") != NULL)
-    {
-        printf(
-            "CELLULAR MODEM: AT command returned ERROR\n"
-        );
-
-        return false;
-    }
-
-    if (strstr(response, "OK") != NULL)
-    {
-        return true;
-    }
-
-    printf(
-        "CELLULAR MODEM: Unexpected AT response\n"
-    );
-
-    return false;
+    // Debe responder +CPIN: READY y luego OK
+    return (strstr(response, "+CPIN: READY") != NULL);
 }
 
-/* ============================================================
- * WaitFor
- * ============================================================ */
-
-/*
- * Envía NO comando.
- *
- * Solamente lee UART y espera encontrar una cadena determinada.
- *
- * Ejemplos:
- *
- *     CellularModemWaitFor("> ", ...)
- *
- *     CellularModemWaitFor("+QIURC: \"recv\"", ...)
- *
- *     CellularModemWaitFor("+QIOPEN:", ...)
- *
- * Es una herramienta interna para los comandos que no tienen
- * una respuesta AT convencional.
- */
-
-static bool CellularModemWaitFor(
-    const char *expected,
-    char *response,
-    size_t response_size,
-    uint32_t timeout_ms
-)
+bool CellularModemIsNetworkRegistered(void)
 {
-    if (expected == NULL ||
-        response == NULL ||
-        response_size == 0)
-    {
-        return false;
-    }
+    char response[128];
 
-    response[0] = '\0';
+    // Consulta el estado de registro en red LTE/EPS
+    UartHalWriteBytes("AT+CEREG?\r\n", 11);
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 3000);
 
-    int len = UartHalReadBytes(
-        response,
-        response_size - 1,
-        timeout_ms
-    );
-
-    if (len <= 0)
-    {
+    if (len <= 0) {
         return false;
     }
 
     response[len] = '\0';
 
-    printf(
-        "CELLULAR MODEM RX: %s\n",
-        response
-    );
+    // +CEREG: <n>,1 -> Registrado en red local
+    // +CEREG: <n>,5 -> Registrado en roaming
+    bool is_home    = (strstr(response, ",1") != NULL);
+    bool is_roaming = (strstr(response, ",5") != NULL);
 
-    /*
-     * Guardar URC de recepción si apareció junto
-     * con la respuesta que estamos esperando.
-     */
-    CellularModemProcessReceiveUrc(response);
-
-    if (strstr(response, expected) != NULL)
-    {
-        return true;
-    }
-
-    return false;
+    return (is_home || is_roaming);
 }
 
-/* ============================================================
- * URC de recepción
- * ============================================================ */
+/* ============================================================================
+ * 3. Identificación del Dispositivo
+ * ============================================================================ */
 
-static bool CellularModemProcessReceiveUrc(
-    const char *response
-)
+bool CellularModemGetIMEI(char *imei_out, size_t max_len)
 {
-    const char *p;
-
-    if (response == NULL)
-    {
+    if (imei_out == NULL || max_len < 16) {
         return false;
     }
 
-    /*
-     * Buscar:
-     *
-     * +QIURC: "recv",0,<cantidad>
-     */
-    p = strstr(
-        response,
-        "+QIURC: \"recv\""
-    );
+    // CORRECCIÓN 1: Declarar como un buffer de tamaño suficiente
+    char response[64]; 
+    
+    // 1. Enviar el comando AT+CGSN directamente por la UART
+    UartHalWriteBytes("AT+CGSN\r\n", 9);
+    
+    // 2. Leer la respuesta de la UART
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 3000);
 
-    if (p == NULL)
-    {
+    if (len <= 0) {
         return false;
     }
 
-    int socket_id;
-    int bytes;
+    response[len] = '\0';
 
-    if (sscanf(
-            p,
-            "+QIURC: \"recv\",%d,%d",
-            &socket_id,
-            &bytes
-        ) != 2)
-    {
+    // 3. Validar que la respuesta contenga "OK"
+    if (strstr(response, "OK") == NULL) {
         return false;
     }
 
-    if (socket_id != CELLULAR_SOCKET_ID ||
-        bytes <= 0)
-    {
+    // 4. Buscar el primer dígito del IMEI en la respuesta
+    char *start = response;
+    while (*start && (*start < '0' || *start > '9')) {
+        start++;
+    }
+
+    // Verificar que queden al menos 15 dígitos
+    if (strlen(start) < 15) {
         return false;
     }
 
-    s_rx_data_pending = true;
-    s_rx_bytes_pending = (size_t)bytes;
-    s_rx_data_length = 0;
-
-    /*
-     * Buscar el final de la línea de la URC.
-     *
-     * Ejemplo:
-     *
-     * +QIURC: "recv",0,4\r\n
-     * ACK
-     */
-    const char *data_start = strstr(
-        p,
-        "\r\n"
-    );
-
-    if (data_start != NULL)
-    {
-        data_start += 2;
-
-        /*
-         * Determinar cuántos bytes quedaron después
-         * de la línea de la URC.
-         */
-        size_t offset = (size_t)(
-            data_start - response
-        );
-
-        size_t response_length = strlen(response);
-
-        size_t available =
-            response_length - offset;
-
-        /*
-         * Si ya llegaron los datos junto con la URC,
-         * guardarlos.
-         */
-        if (available >= (size_t)bytes)
-        {
-            if ((size_t)bytes <= sizeof(s_rx_data_buffer))
-            {
-                memcpy(
-                    s_rx_data_buffer,
-                    data_start,
-                    (size_t)bytes
-                );
-
-                s_rx_data_length = (size_t)bytes;
-
-                printf(
-                    "CELLULAR MODEM: RX data already available "
-                    "(%zu bytes)\n",
-                    s_rx_data_length
-                );
-            }
-        }
-    }
-
-    printf(
-        "CELLULAR MODEM: RX data pending "
-        "socket=%d bytes=%d\n",
-        socket_id,
-        bytes
-    );
+    // Copiar los 15 dígitos del IMEI al buffer de salida
+    strncpy(imei_out, start, 15);
+    
+    // CORRECCIÓN 2: Terminar la cadena en el índice 15 (el IMEI tiene 15 dígitos)
+    imei_out[15] = '\0';
 
     return true;
 }
-/* ============================================================
- * IMEI
- * ============================================================ */
 
-bool CellularModemGetImei(
-    char *imei,
-    size_t imei_size
-)
+/*========================================================================
+ * 4. Configuración y Activación PDP (Contexto de Datos)
+ *========================================================================*/
+
+bool CellularModemConfigurePdp(const char *apn, const char *username, const char *password)
 {
-    if (imei == NULL ||
-        imei_size == 0)
-    {
+    if (apn == NULL) {
         return false;
     }
 
+    char cmd[256];
     char response[128];
 
-    if (!CellularModemSendCommand(
-            "AT+CGSN\r\n",
-            response,
-            sizeof(response),
-            2000))
-    {
+    const char *user = (username != NULL) ? username : "";
+    const char *pass = (password != NULL) ? password : "";
+    int auth_type = (strlen(user) > 0) ? 1 : 0; // 1 = PAP, 0 = Sin autenticación
+
+    // Formato: AT+QICSGP=<context_id>,<context_type>,"<apn>","<user>","<pass>",<auth>
+    snprintf(cmd, sizeof(cmd), "AT+QICSGP=1,1,\"%s\",\"%s\",\"%s\",%d\r\n",
+             apn, user, pass, auth_type);
+
+    UartHalWriteBytes(cmd, strlen(cmd));
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 3000);
+
+    if (len <= 0) {
         return false;
     }
 
-    /*
-     * Buscar una secuencia de dígitos.
-     *
-     * La respuesta esperada es:
-     *
-     * 869671077009056
-     *
-     * OK
-     */
+    response[len] = '\0';
 
-    const char *p = response;
-
-    while (*p != '\0')
-    {
-        if (*p >= '0' && *p <= '9')
-        {
-            const char *start = p;
-
-            while (*p >= '0' && *p <= '9')
-            {
-                p++;
-            }
-
-            size_t length = (size_t)(p - start);
-
-            if (length > 0 &&
-                length < imei_size)
-            {
-                memcpy(
-                    imei,
-                    start,
-                    length
-                );
-
-                imei[length] = '\0';
-
-                return true;
-            }
-        }
-        else
-        {
-            p++;
-        }
-    }
-
-    return false;
+    return (strstr(response, "OK") != NULL);
 }
-
-/* ============================================================
- * PDP
- * ============================================================ */
-
-bool CellularModemConfigurePdp(
-    const char *apn,
-    const char *username,
-    const char *password
-)
-{
-    if (apn == NULL ||
-        username == NULL ||
-        password == NULL)
-    {
-        return false;
-    }
-
-    
-    char response[256];
-    /*
-     * Si el contexto ya quedó activo de una ejecución anterior,
-     * lo desactivamos para poder reconfigurar el APN.
-     */
-    if (CellularModemIsPdpActive())
-    {
-        printf("CELLULAR MODEM: PDP active, deactivating before config...\n");
-        
-        if (!CellularModemSendCommand(
-                "AT+QIDEACT=1\r\n",
-                response,
-                sizeof(response),
-                10000))
-        {
-            return false;
-        }
-    }
-    
-    char command[192];
-
-    snprintf(
-        command,
-        sizeof(command),
-        "AT+QICSGP=1,1,\"%s\",\"%s\",\"%s\",1\r\n",
-        apn,
-        username,
-        password
-    );
-
-    return CellularModemSendCommand(
-        command,
-        response,
-        sizeof(response),
-        5000
-    );
-}
-
 
 bool CellularModemActivatePdp(void)
 {
-    char response[256];
+    char response[128];
 
-    /*
-     * Si ya está activo, no hace falta volver a activarlo.
-     */
-    if (CellularModemIsPdpActive())
-    {
-        printf(
-            "CELLULAR MODEM: PDP already active\n"
-        );
+    // Activa el contexto PDP 1
+    UartHalWriteBytes("AT+QIACT=1\r\n", 12);
 
-        return true;
+    // Timeout elevado (15s) por la negociación IP con la red
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 15000);
+
+    if (len <= 0) {
+        return false;
     }
 
-    return CellularModemSendCommand(
-        "AT+QIACT=1\r\n",
-        response,
-        sizeof(response),
-        15000
-    );
+    response[len] = '\0';
+
+    return (strstr(response, "OK") != NULL);
 }
 
-
-bool CellularModemIsPdpActive(void)
-{
-    char response[256];
-
-    if (!CellularModemSendCommand(
-            "AT+QIACT?\r\n",
-            response,
-            sizeof(response),
-            2000))
-    {
-        return false;
-    }
-
-    /*
-     * Para el contexto 1 esperamos:
-     *
-     * +QIACT: 1,1,1,"IP"
-     */
-    if (strstr(
-            response,
-            "+QIACT: 1,1,1"
-        ) != NULL)
-    {
-        return true;
-    }
-
-    return false;
-}
-
-/* ============================================================
- * TCP - Open
- * ============================================================ */
-
-bool CellularModemOpenTcp(
-    const char *server,
-    uint16_t port
-)
-{
-    if (server == NULL)
-    {
-        return false;
-    }
-
-    char command[192];
-    char response[256];
-
-    snprintf(
-        command,
-        sizeof(command),
-        "AT+QIOPEN=1,%d,\"TCP\",\"%s\",%u,0,1\r\n",
-        CELLULAR_SOCKET_ID,
-        server,
-        port
-    );
-
-    /*
-     * QIOPEN primero devuelve:
-     *
-     * OK
-     *
-     * y luego:
-     *
-     * +QIOPEN: 0,0
-     *
-     * El resultado importante es +QIOPEN: 0,0.
-     */
-
-    int written = UartHalWriteBytes(
-        command,
-        strlen(command)
-    );
-
-    if (written <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: QIOPEN TX failed\n"
-        );
-
-        return false;
-    }
-
-    printf(
-        "CELLULAR MODEM TX: %s",
-        command
-    );
-
-    /*
-     * Primera respuesta: OK.
-     */
-    int len = UartHalReadBytes(
-        response,
-        sizeof(response) - 1,
-        5000
-    );
-
-    if (len <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: QIOPEN response timeout\n"
-        );
-
-        return false;
-    }
-
-    response[len] = '\0';
-
-    printf(
-        "CELLULAR MODEM RX: %s\n",
-        response
-    );
-
-    CellularModemProcessReceiveUrc(response);
-
-    if (strstr(response, "ERROR") != NULL)
-    {
-        return false;
-    }
-
-    /*
-     * Si ya vino +QIOPEN en la misma lectura.
-     */
-    if (strstr(response, "+QIOPEN:") != NULL)
-    {
-        if (strstr(response, "+QIOPEN: 0,0") != NULL)
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    /*
-     * Si solamente llegó OK, esperar +QIOPEN.
-     */
-    len = UartHalReadBytes(
-        response,
-        sizeof(response) - 1,
-        CELLULAR_TCP_TIMEOUT_MS
-    );
-
-    if (len <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: QIOPEN URC timeout\n"
-        );
-
-        return false;
-    }
-
-    response[len] = '\0';
-
-    printf(
-        "CELLULAR MODEM RX: %s\n",
-        response
-    );
-
-    CellularModemProcessReceiveUrc(response);
-
-    if (strstr(
-            response,
-            "+QIOPEN: 0,0"
-        ) != NULL)
-    {
-        return true;
-    }
-
-    return false;
-}
-
-/* ============================================================
- * TCP - Send
- * ============================================================ */
-
-bool CellularModemSendTcp(
-    const uint8_t *data,
-    size_t length
-)
-{
-    if (data == NULL ||
-        length == 0)
-    {
-        return false;
-    }
-
-    char command[64];
-    char response[CELLULAR_RX_BUFFER_SIZE];
-
-    /*
-     * --------------------------------------------------------
-     * Paso 1: solicitar prompt
-     * --------------------------------------------------------
-     */
-
-    snprintf(
-        command,
-        sizeof(command),
-        "AT+QISEND=%d,%zu\r\n",
-        CELLULAR_SOCKET_ID,
-        length
-    );
-
-    int written = UartHalWriteBytes(
-        command,
-        strlen(command)
-    );
-
-    if (written <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: QISEND TX failed\n"
-        );
-
-        return false;
-    }
-
-    printf(
-        "CELLULAR MODEM TX: %s",
-        command
-    );
-
-    /*
-     * Esperar:
-     *
-     * >
-     */
-    int len = UartHalReadBytes(
-        response,
-        sizeof(response) - 1,
-        5000
-    );
-
-    if (len <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: QISEND prompt timeout\n"
-        );
-
-        return false;
-    }
-
-    response[len] = '\0';
-
-    printf(
-        "CELLULAR MODEM RX: %s\n",
-        response
-    );
-
-    if (strstr(response, "> ") == NULL)
-    {
-        printf(
-            "CELLULAR MODEM: QISEND prompt not received\n"
-        );
-
-        return false;
-    }
-
-    /*
-     * --------------------------------------------------------
-     * Paso 2: enviar payload
-     * --------------------------------------------------------
-     */
-
-    printf(
-        "CELLULAR MODEM TX payload (%zu bytes): ",
-        length
-    );
-
-    /*
-     * El payload puede no ser texto.
-     * Por eso no usamos %s.
-     */
-    fwrite(
-        data,
-        1,
-        length,
-        stdout
-    );
-
-    printf("\n");
-
-    written = UartHalWriteBytes(
-        (const char *)data,
-        length
-    );
-
-    if (written != (int)length)
-    {
-        printf(
-            "CELLULAR MODEM: Payload TX failed\n"
-        );
-
-        return false;
-    }
-
-    /*
-     * --------------------------------------------------------
-     * Paso 3: esperar SEND OK
-     * --------------------------------------------------------
-     */
-
-    len = UartHalReadBytes(
-        response,
-        sizeof(response) - 1,
-        5000
-    );
-
-    if (len <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: SEND OK timeout\n"
-        );
-
-        return false;
-    }
-
-    response[len] = '\0';
-
-    printf(
-        "CELLULAR MODEM RX: %s\n",
-        response
-    );
-
-    /*
-     * MUY IMPORTANTE:
-     *
-     * Puede llegar:
-     *
-     * SEND OK
-     * +QIURC: "recv",0,3
-     *
-     * en la misma lectura.
-     *
-     * ProcessReceiveUrc() guarda esa información.
-     */
-    CellularModemProcessReceiveUrc(response);
-
-    if (strstr(response, "SEND FAIL") != NULL)
-    {
-        printf(
-            "CELLULAR MODEM: SEND FAIL\n"
-        );
-
-        return false;
-    }
-
-    if (strstr(response, "SEND OK") == NULL)
-    {
-        printf(
-            "CELLULAR MODEM: SEND OK not received\n"
-        );
-
-        return false;
-    }
-
-    return true;
-}
-
-/* ============================================================
- * TCP - Receive
- * ============================================================ */
-
-bool CellularModemReceiveTcp(
-    uint8_t *data,
-    size_t data_size,
-    size_t *received
-)
-{
-    if (data == NULL ||
-        data_size == 0 ||
-        received == NULL)
-    {
-        return false;
-    }
-
-    *received = 0;
-
-    char response[CELLULAR_RX_BUFFER_SIZE];
-
-    /*
-     * ========================================================
-     * CASO 1:
-     * Ya tenemos datos almacenados previamente.
-     * ========================================================
-     */
-    if (s_rx_data_length > 0)
-    {
-        printf(
-            "CELLULAR MODEM: Returning buffered RX data "
-            "(%zu bytes)\n",
-            s_rx_data_length
-        );
-
-        if (s_rx_data_length > data_size)
-        {
-            printf(
-                "CELLULAR MODEM: RX buffer too small\n"
-            );
-
-            return false;
-        }
-
-        memcpy(
-            data,
-            s_rx_data_buffer,
-            s_rx_data_length
-        );
-
-        *received = s_rx_data_length;
-
-        s_rx_data_length = 0;
-        s_rx_data_pending = false;
-        s_rx_bytes_pending = 0;
-
-        return true;
-    }
-
-    /*
-     * ========================================================
-     * CASO 2:
-     * No tenemos datos. Esperamos una URC por el UART.
-     * ========================================================
-     */
-    printf(
-        "CELLULAR MODEM: Waiting for RX URC...\n"
-    );
-
-    int len = UartHalReadBytes(
-        response,
-        sizeof(response) - 1,
-        CELLULAR_TCP_TIMEOUT_MS
-    );
-
-    if (len <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: Receive timeout\n"
-        );
-
-        return false;
-    }
-
-    response[len] = '\0';
-
-    printf(
-        "CELLULAR MODEM RX: %s\n",
-        response
-    );
-
-    /*
-     * Procesar URC.
-     */
-    if (!CellularModemProcessReceiveUrc(response))
-    {
-        printf(
-            "CELLULAR MODEM: No receive URC found\n"
-        );
-
-        return false;
-    }
-
-    /*
-     * ========================================================
-     * CASO 3:
-     * La URC ya traía los datos empaquetados junto a ella.
-     * ========================================================
-     */
-    if (s_rx_data_length > 0)
-    {
-        printf(
-            "CELLULAR MODEM: URC contained RX data "
-            "(%zu bytes)\n",
-            s_rx_data_length
-        );
-
-        if (s_rx_data_length > data_size)
-        {
-            printf(
-                "CELLULAR MODEM: RX buffer too small\n"
-            );
-
-            return false;
-        }
-
-        memcpy(
-            data,
-            s_rx_data_buffer,
-            s_rx_data_length
-        );
-
-        *received = s_rx_data_length;
-
-        s_rx_data_length = 0;
-        s_rx_data_pending = false;
-        s_rx_bytes_pending = 0;
-
-        return true;
-    }
-
-    /*
-     * ========================================================
-     * CASO 4:
-     * La URC solamente informó que hay datos pendientes.
-     * Ahora procedemos a leerlos usando QIRD.
-     * ========================================================
-     */
-    if (!s_rx_data_pending)
-    {
-        printf(
-            "CELLULAR MODEM: No pending RX data\n"
-        );
-
-        return false;
-    }
-
-    printf(
-        "CELLULAR MODEM: RX data pending, "
-        "using QIRD (%zu bytes)\n",
-        s_rx_bytes_pending
-    );
-
-    size_t bytes_to_read = s_rx_bytes_pending;
-    if (bytes_to_read > data_size)
-    {
-        bytes_to_read = data_size;
-    }
-
-    char command[64];
-    snprintf(
-        command,
-        sizeof(command),
-        "AT+QIRD=%d,%zu\r\n",
-        CELLULAR_SOCKET_ID,
-        bytes_to_read
-    );
-
-    int written = UartHalWriteBytes(
-        command,
-        strlen(command)
-    );
-
-    if (written <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: QIRD TX failed\n"
-        );
-
-        return false;
-    }
-
-    printf(
-        "CELLULAR MODEM TX: %s",
-        command
-    );
-
-    len = UartHalReadBytes(
-        response,
-        sizeof(response) - 1,
-        5000
-    );
-
-    if (len <= 0)
-    {
-        printf(
-            "CELLULAR MODEM: QIRD timeout\n"
-        );
-
-        return false;
-    }
-
-    response[len] = '\0';
-
-    printf(
-        "CELLULAR MODEM RX: %s\n",
-        response
-    );
-
-    const char *qird = strstr(response, "+QIRD:");
-    if (qird == NULL)
-    {
-        printf(
-            "CELLULAR MODEM: QIRD response invalid\n"
-        );
-
-        return false;
-    }
-
-    int actual_bytes = 0;
-    if (sscanf(qird, "+QIRD: %d", &actual_bytes) != 1)
-    {
-        printf(
-            "CELLULAR MODEM: Cannot parse QIRD length\n"
-        );
-
-        return false;
-    }
-
-    if (actual_bytes <= 0)
-    {
-        s_rx_data_pending = false;
-        s_rx_bytes_pending = 0;
-        return true;
-    }
-
-    if ((size_t)actual_bytes > data_size)
-    {
-        printf(
-            "CELLULAR MODEM: RX buffer too small "
-            "(needed=%d available=%zu)\n",
-            actual_bytes,
-            data_size
-        );
-
-        return false;
-    }
-
-    const char *data_start = strstr(qird, "\r\n");
-    if (data_start == NULL)
-    {
-        printf(
-            "CELLULAR MODEM: QIRD data not found\n"
-        );
-
-        return false;
-    }
-
-    data_start += 2;
-
-    size_t offset = (size_t)(data_start - response);
-    if (offset + (size_t)actual_bytes > (size_t)len)
-    {
-        printf(
-            "CELLULAR MODEM: QIRD data incomplete\n"
-        );
-
-        return false;
-    }
-
-    memcpy(data, data_start, (size_t)actual_bytes);
-    *received = (size_t)actual_bytes;
-
-    s_rx_data_pending = false;
-    s_rx_bytes_pending = 0;
-
-    return true;
-}
-/* ============================================================
- * TCP - Close
- * ============================================================ */
-
-bool CellularModemCloseTcp(void)
+bool CellularModemIsPdpActive(char *ip_address, size_t ip_address_size)
 {
     char response[128];
 
-    bool result = CellularModemSendCommand(
-        "AT+QICLOSE=0\r\n",
-        response,
-        sizeof(response),
-        10000
-    );
+    // Consulta los contextos PDP activos y sus IP asignadas
+    UartHalWriteBytes("AT+QIACT?\r\n", 11);
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 3000);
 
-    /*
-     * Al cerrar el socket ya no debe quedar una recepción
-     * pendiente asociada al mismo.
-     */
-    s_rx_data_pending = false;
-    s_rx_bytes_pending = 0;
+    if (len <= 0) {
+        return false;
+    }
 
-    return result;
+    response[len] = '\0';
+
+    // Verificamos respuesta global OK
+    if (strstr(response, "OK") == NULL) {
+        return false;
+    }
+
+    // Buscamos la línea que indica que el contexto 1 está activo: +QIACT: 1,1,1,"
+    char *start = strstr(response, "+QIACT: 1,1,1,\"");
+    if (start == NULL) {
+        return false; // El contexto PDP 1 no está activo
+    }
+
+    // Si el llamador solicita la IP, la extraemos entre comillas
+    if (ip_address != NULL && ip_address_size > 0) {
+        start += strlen("+QIACT: 1,1,1,\""); // Avanzamos al primer carácter de la IP
+        char *end = strchr(start, '"');
+
+        if (end != NULL) {
+            size_t ip_len = (size_t)(end - start);
+            if (ip_len < ip_address_size) {
+                strncpy(ip_address, start, ip_len);
+                ip_address[ip_len] = '\0';
+            } else {
+                return false; // El buffer provisto es muy pequeño
+            }
+        }
+    }
+
+    return true;
+}
+
+/* ============================================================================
+ * 5. Gestión de Sockets TCP (Operaciones de Red)
+ * ============================================================================ */
+
+bool CellularModemSocketOpen(const char *proto, const char *ip, uint16_t port)
+{
+    if (proto == NULL || ip == NULL || port == 0) {
+        return false;
+    }
+
+    char cmd[256];
+    char response[128];
+
+    // AT+QIOPEN=<contextID>,<connectID>,"<service_type>","<IP>",<port>
+    snprintf(cmd, sizeof(cmd), "AT+QIOPEN=1,0,\"%s\",\"%s\",%u,0,0\r\n", proto, ip, port);
+
+    UartHalWriteBytes(cmd, strlen(cmd));
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 10000);
+
+    if (len <= 0) {
+        return false;
+    }
+
+    response[len] = '\0';
+
+    // Espera OK de aceptación del comando o confirmación de apertura +QIOPEN: 0,0
+    return (strstr(response, "OK") != NULL || strstr(response, "+QIOPEN: 0,0") != NULL);
+}
+
+bool CellularModemSocketSend(const uint8_t *payload, uint16_t length)
+{
+    if (payload == NULL || length == 0) {
+        return false;
+    }
+
+    char cmd[64];
+    char response[128];
+
+    // AT+QISEND=<connectID>,<length>
+    snprintf(cmd, sizeof(cmd), "AT+QISEND=0,%u\r\n", length);
+    UartHalWriteBytes(cmd, strlen(cmd));
+
+    // Esperamos el prompt '>' del módem
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 2000);
+    if (len <= 0 || strchr(response, '>') == NULL) {
+        return false;
+    }
+
+    // Enviamos el payload binario
+    UartHalWriteBytes((const char *)payload, length);
+
+    // Leemos la confirmación "SEND OK"
+    len = UartHalReadBytes(response, sizeof(response) - 1, 5000);
+    if (len <= 0) {
+        return false;
+    }
+
+    response[len] = '\0';
+    return (strstr(response, "SEND OK") != NULL);
+}
+
+bool CellularModemSocketClose(void)
+{
+    char response[64];
+
+    // AT+QICLOSE=<connectID>
+    UartHalWriteBytes("AT+QICLOSE=0\r\n", 14);
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 3000);
+
+    if (len <= 0) {
+        return false;
+    }
+
+    response[len] = '\0';
+    return (strstr(response, "OK") != NULL);
+}
+
+bool CellularModemSocketReceive(uint8_t *buffer_out, uint16_t max_len, uint16_t *received_len)
+{
+    if (buffer_out == NULL || max_len == 0) {
+        return false;
+    }
+
+    // CORRECCIÓN: Declarar como buffers (arreglos)
+    char cmd[32];
+    char response[512]; // Debe ser mayor a max_len + encabezados AT
+
+    // 1. Solicitar la lectura de bytes del socket 0 vía AT+QIRD
+    snprintf(cmd, sizeof(cmd), "AT+QIRD=0,%u\r\n", max_len);
+    UartHalWriteBytes(cmd, strlen(cmd));
+
+    // 2. Leer la respuesta devuelta por el módem
+    int len = UartHalReadBytes(response, sizeof(response) - 1, 3000);
+    if (len <= 0) {
+        return false;
+    }
+    response[len] = '\0';
+
+    // 3. Buscar la respuesta +QIRD: <cantidad>
+    char *qird = strstr(response, "+QIRD:");
+    if (qird == NULL) {
+        return false;
+    }
+
+    int count = 0;
+    if (sscanf(qird, "+QIRD: %d", &count) != 1 || count <= 0) {
+        return false; // Sin datos o error de lectura
+    }
+
+    // 4. Ubicar el comienzo del payload tras el primer salto de línea '\n'
+    char *payload = strchr(qird, '\n');
+    if (payload == NULL) {
+        return false;
+    }
+    payload++; // Saltar el '\n' para apuntar al primer byte del dato
+
+    // 5. Copiar los bytes al buffer de salida
+    uint16_t bytes_to_copy = (count < max_len) ? (uint16_t)count : max_len;
+    
+    // PRECAUCIÓN EXTRA: Validar que no estemos leyendo fuera de nuestro buffer 'response'
+    int payload_offset = payload - response;
+    if (payload_offset + bytes_to_copy > len) {
+        bytes_to_copy = len - payload_offset; // Truncar a lo que realmente se recibió
+    }
+
+    memcpy(buffer_out, payload, bytes_to_copy);
+
+    if (received_len != NULL) {
+        *received_len = bytes_to_copy;
+    }
+
+    return true;
 }

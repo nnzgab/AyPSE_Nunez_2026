@@ -1,82 +1,77 @@
 #include "panic_handler.h"
+#include "panic_button.h"   /* Capa BSP: PanicButtonInit, PanicButtonIsPressed, PanicButtonAttachInterrupt */
+#include "board_clock.h"    /* Capa BSP: BoardClockGetMs */
+#include <stddef.h>
 
-#include "panic_button.h"
+#define DEBOUNCE_TIME_MS      50U
 
+static panic_event_cb_t s_panic_cb = NULL;
+static uint16_t          s_sequence_number = 1U;
 
-/*==================[internal data declaration]==============================*/
+/* Estado interno de la máquina de detección no bloqueante */
+static volatile bool     s_isr_flag = false;
+static uint32_t          s_isr_timestamp_ms = 0U;
+static bool              s_debounce_pending = false;
 
-/**
- * @brief Estado actual del manejador de pánico.
- */
-static panic_status_t panic_status = PANIC_STATUS_NORMAL;
-
-
-/*==================[external functions definition]===========================*/
-
-bool PanicHandlerInit(void)
-{
-    /*
-     * Comenzamos siempre sin una alarma pendiente.
-     */
-    panic_status = PANIC_STATUS_NORMAL;
-
-    /*
-     * Inicializamos el botón de pánico.
-     *
-     * La implementación del botón pertenece al BSP.
-     */
-    if (!PanicButtonInit())
-    {
-        return false;
+/* ============================================================================
+ * ISR interna del pulsador (Callback registrado en el BSP)
+ * ============================================================================ */
+static void PanicHandler_OnButtonISR(void *arg) {
+    (void)arg;
+    if (!s_debounce_pending) {
+        s_isr_flag = true;
     }
-
-    return true;
 }
 
+/* ============================================================================
+ * Inicialización del Módulo (100% C puro, agnóstico de RTOS)
+ * ============================================================================ */
+panic_handler_err_t PanicHandler_Init(panic_event_cb_t callback) {
+    if (callback == NULL) {
+        return PANIC_HANDLER_ERR_PARAM;
+    }
 
-void PanicHandlerRunStep(void)
-{
-    /*
-     * Solamente buscamos una nueva pulsación cuando
-     * no existe una alarma pendiente.
-     */
-    if (panic_status == PANIC_STATUS_NORMAL)
-    {
-        /*
-         * PanicButtonPressedEvent() devuelve true
-         * cuando el BSP detectó una pulsación válida.
-         */
-        if (PanicButtonPressedEvent())
-        {
-            panic_status = PANIC_STATUS_PENDING;
+    s_panic_cb = callback;
+    s_sequence_number = 1U;
+    s_isr_flag = false;
+    s_debounce_pending = false;
+    s_isr_timestamp_ms = 0U;
+
+    if (!PanicButtonInit()) {
+        return PANIC_HANDLER_ERR_INIT;
+    }
+
+    /* Conecta la interrupción física al handler interno */
+    PanicButtonAttachInterrupt(PanicHandler_OnButtonISR, NULL);
+
+    return PANIC_HANDLER_OK;
+}
+
+/* ============================================================================
+ * Función de Pasada No Bloqueante (RunStep - Estándar C Puro)
+ * ============================================================================ */
+void PanicHandler_RunStep(void) {
+    uint32_t now = BoardClockGetMs();
+
+    // 1. Detectar si la ISR levantó la bandera de pulsación
+    if (s_isr_flag) {
+        s_isr_flag = false;
+        s_debounce_pending = true;
+        s_isr_timestamp_ms = now;
+    }
+
+    // 2. Procesar el tiempo de debounce de forma no bloqueante
+    if (s_debounce_pending) {
+        if ((now - s_isr_timestamp_ms) >= DEBOUNCE_TIME_MS) {
+            s_debounce_pending = false;
+
+            // Reconfirmación de presión física
+            if (PanicButtonIsPressed()) {
+                uint16_t seq = s_sequence_number++;
+                if (s_panic_cb != NULL) {
+                    s_panic_cb(seq);
+                }
+            }
         }
     }
 }
-
-
-panic_status_t PanicHandlerGetStatus(void)
-{
-    return panic_status;
-}
-
-
-bool PanicHandlerIsActive(void)
-{
-    return (panic_status == PANIC_STATUS_PENDING);
-}
-
-
-void PanicHandlerClear(void)
-{
-    /*
-     * Por ahora simplemente eliminamos la alarma pendiente.
-     *
-     * Más adelante esta función podrá ser llamada
-     * cuando Cellular confirme que el servidor recibió
-     * correctamente la alarma.
-     */
-    panic_status = PANIC_STATUS_NORMAL;
-}
-
-
-/*==================[end of file]============================================*/

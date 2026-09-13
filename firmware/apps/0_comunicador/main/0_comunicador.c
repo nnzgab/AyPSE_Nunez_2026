@@ -1,219 +1,168 @@
-/*! @mainpage Comunicador de Pánico Celular
- *
- * \section genDesc General Description
- *
- * Aplicación principal basada en una máquina de estados no bloqueante que coordina
- * la lectura de un botón de pánico, indicadores visuales por LED y la transmisión
- * de eventos vía módem celular por TCP.
- *
- * @section changelog Changelog
- *
- * |   Date     | Description                                    |
- * |:----------:|:-----------------------------------------------|
- * | 04/09/2026 | Document creation                              |
- *
- * @author Gabriel Eduardo Núñez (nunezgabrieleduardo@gmail.com) *
- * 
- */
-
-/*==================[inclusions]=============================================*/
 #include <stdio.h>
-#include <stdint.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_timer.h"
-#include "esp_err.h"
 
-#include "uart_hal.h"
+/* Capa Middleware */
 #include "panic_handler.h"
 #include "status_indicator.h"
+#include "event_frame.h"
 #include "cellular_net.h"
 #include "cellular_modem.h"
-#include "event_frame.h"
 
-/*==================[macros and definitions]=================================*/
-#define UART_BAUDRATE    115200
-#define CONFIG_STEP_PERIOD 20   /* Período del loop principal en ms */
-#define APP_APN          "datos.personal.com"
-#define APP_SERVER_IP    "hkmwp-190-183-23-94.run.pinggy-free.link"
-#define APP_SERVER_PORT  33027
-#define APP_ACK_STR      "ACK"
+/* Configuración de la aplicación */
+#define PANIC_LED_HOLD_TIME_MS  2000U
+#define DEFAULT_IMEI            "123456789012345"
 
-/*==================[internal data definition]===============================*/
-typedef enum {
-    APP_STATE_STARTING = 0,
-    APP_STATE_REGISTERING,
-    APP_STATE_CONNECTING_APN,
-    APP_STATE_READY,
-    APP_STATE_OPENING_TCP,
-    APP_STATE_SENDING,
-    APP_STATE_WAITING_ACK,
-    APP_STATE_CLOSING
-} app_state_t;
+/* Variables globales de la aplicación */
+static char g_device_imei[16] = DEFAULT_IMEI;
+static uint32_t g_panic_led_timer_ms = 0;
+static bool g_panic_led_active = false;
 
-static app_state_t s_state = APP_STATE_STARTING;
-static char s_imei[32] = {0};
+/* ============================================================================
+ * Callback de Evento de Pánico (Invocado por panic_handler tras debounce)
+ * ============================================================================ */
+static void OnPanicEvent(uint16_t sequence_number) {
+    printf("\n========================================\n");
+    printf(" ¡ALERTA DE PANICO DETECTADA! (Secuencia: %u)\n", sequence_number);
+    printf("========================================\n");
 
-/*==================[internal functions declaration]=========================*/
-static void UpdateCellularLed(void);
-static void ComunicadorInit(void);
-static void ComunicadorRunStep(void);
+    /* 1. Activar indicación visual de pánico */
+    StatusIndicator_SetPanic(true);
+    g_panic_led_active = true;
+    g_panic_led_timer_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
-/*==================[internal functions definition]==========================*/
-static void UpdateCellularLed(void)
-{
-    switch (s_state)
-    {
-        case APP_STATE_STARTING:
-            StatusIndicatorSetCellular(CELLULAR_STATUS_STARTING);
-            break;
-        case APP_STATE_REGISTERING:
-            StatusIndicatorSetCellular(CELLULAR_STATUS_SEARCHING);
-            break;
-        case APP_STATE_READY:
-            StatusIndicatorSetCellular(CELLULAR_STATUS_READY);
-            break;
-        case APP_STATE_OPENING_TCP:
-        case APP_STATE_SENDING:
-        case APP_STATE_WAITING_ACK:
-        case APP_STATE_CLOSING:
-            StatusIndicatorSetCellular(CELLULAR_STATUS_TRANSMITTING);
-            break;
-        default:
-            break;
+    /* 2. Preparar los datos de la estructura de evento */
+    event_data_t event;
+    event.event_type = 0x01; // Tipo: Alerta de Pánico
+    event.sequence_number = sequence_number;
+    strncpy(event.imei, g_device_imei, sizeof(event.imei) - 1);
+    event.imei[sizeof(event.imei) - 1] = '\0';
+
+    /* 3. Empaquetar la trama en formato texto CSV (TIPO,IMEI,SECUENCIA\r\n) */
+    char frame_buffer[MAX_ALERT_PAYLOAD_SIZE];
+    uint16_t frame_len = 0;
+
+    event_frame_err_t frame_err = EventFrame_PackText(&event, frame_buffer, sizeof(frame_buffer), &frame_len);
+
+    if (frame_err == EVENT_FRAME_OK) {
+        printf("--> Trama generada [%u bytes]: %s", frame_len, frame_buffer);
+
+        /* 4. Enviar trama a la cola del servicio de red celular */
+        cellular_net_err_t net_err = CellularNet_SendAlertFrame((const uint8_t *)frame_buffer, frame_len);
+
+        if (net_err == CELL_NET_OK) {
+            printf("--> Trama de pánico depositada exitosamente en la cola de red.\n");
+        } else if (net_err == CELL_NET_ERR_NOT_READY) {
+            printf("--> [ADVERTENCIA] Red no lista. Trama descartada/rechazada.\n");
+        } else if (net_err == CELL_NET_ERR_BUSY) {
+            printf("--> [ERROR] Cola de red llena. Transmisión saturada.\n");
+        } else {
+            printf("--> [ERROR] Fallo al despachar trama a la red (Error: %d).\n", net_err);
+        }
+    } else {
+        printf("--> [ERROR] Fallo al empaquetar la trama (Error: %d).\n", frame_err);
     }
 }
 
-static void ComunicadorInit(void)
-{
-    UartHalInit(UART_BAUDRATE);
+/* ============================================================================
+ * Mapeo de Estados: CellularNet FSM -> StatusIndicator LED Pattern
+ * ============================================================================ */
+static void UpdateStatusLedFromNetwork(void) {
+    cellular_net_status_t net_status = CellularNet_GetStatus();
 
-    if (!PanicHandlerInit()) {
-        printf("Error crítico: Falló init de PanicHandler\n");
-    }
-    if (!StatusIndicatorInit()) {
-        printf("Error crítico: Falló init de StatusIndicator\n");
-    }
-
-    StatusIndicatorSetCellular(CELLULAR_STATUS_STARTING);
-    StatusIndicatorRunStep();
-
-    if (CellularNetInit() != ESP_OK) {
-        printf("Error crítico: Falló init de CellularNet\n");
-    }
-
-    s_state = APP_STATE_REGISTERING;
-}
-
-static void ComunicadorRunStep(void)
-{
-    /* 1. Actualizar capas de bajo nivel de forma continua y no bloqueante */
-    PanicHandlerRunStep();
-    StatusIndicatorSetPanic(PanicHandlerIsActive());
-
-    /* 2. Máquina de estados de la aplicación */
-    switch (s_state)
-    {
-        case APP_STATE_REGISTERING:
-            if (CellularNetGetStatus() != NET_STATUS_DISCONNECTED)
-            {
-                CellularModemGetImei(s_imei, sizeof(s_imei));
-                printf("Módem registrado. IMEI obtenido: %s\n", s_imei);
-                s_state = APP_STATE_CONNECTING_APN;
-            }
+    switch (net_status.state) {
+        case CELL_STATE_OFF:
+            StatusIndicator_SetCellular(CELLULAR_STATUS_OFF);
             break;
 
-        case APP_STATE_CONNECTING_APN:
-            if (CellularNetConnectApn(APP_APN, "", "") == ESP_OK)
-            {
-                printf("Contexto PDP activado correctamente.\n");
-                s_state = APP_STATE_READY;
-            }
+        case CELL_STATE_STARTING:
+            StatusIndicator_SetCellular(CELLULAR_STATUS_STARTING);
             break;
 
-        case APP_STATE_READY:
-            if (PanicHandlerIsActive())
-            {
-                printf("¡Botón de pánico presionado! Iniciando transmisión...\n");
-                s_state = APP_STATE_OPENING_TCP;
-            }
+        case CELL_STATE_CONNECTING:
+            StatusIndicator_SetCellular(CELLULAR_STATUS_SEARCHING);
             break;
 
-        case APP_STATE_OPENING_TCP:
-            if (CellularNetOpenTcp(APP_SERVER_IP, APP_SERVER_PORT) == ESP_OK)
-            {
-                s_state = APP_STATE_SENDING;
-            }
+        case CELL_STATE_READY:
+            StatusIndicator_SetCellular(CELLULAR_STATUS_READY);
             break;
 
-        case APP_STATE_SENDING:
-        {
-            event_frame_t evt = { .type = EVENT_TYPE_PANIC };
-            
-            size_t imei_len = strlen(s_imei);
-            if (imei_len >= sizeof(evt.imei)) {
-                imei_len = sizeof(evt.imei) - 1;
-            }
-            memcpy(evt.imei, s_imei, imei_len);
-            evt.imei[imei_len] = '\0';
-
-            char frame[64];
-            int len = EventFrameBuild(&evt, frame, sizeof(frame));
-
-            if (len > 0 && CellularNetSendData((const uint8_t *)frame, (size_t)len) == ESP_OK)
-            {
-                s_state = APP_STATE_WAITING_ACK;
-            }
-            break;
-        }
-
-        case APP_STATE_WAITING_ACK:
-        {
-            uint8_t rx[32] = {0};
-            size_t received = 0;
-
-            if (CellularNetReceiveData(rx, sizeof(rx) - 1, &received) == ESP_OK && received > 0)
-            {
-                rx[received] = '\0';
-                printf("Respuesta recibida del servidor: %s\n", rx);
-
-                if (strcmp((const char *)rx, APP_ACK_STR) == 0)
-                {
-                    printf("¡ACK confirmado! Reseteando alarma.\n");
-                    PanicHandlerClear();
-                }
-                s_state = APP_STATE_CLOSING;
-            }
-            break;
-        }
-
-        case APP_STATE_CLOSING:
-            CellularNetCloseTcp();
-            s_state = APP_STATE_READY;
-            printf("Sistema listo para nuevas alertas.\n");
+        case CELL_STATE_ERROR:
+            StatusIndicator_SetCellular(CELLULAR_STATUS_OFF);
             break;
 
         default:
+            StatusIndicator_SetCellular(CELLULAR_STATUS_OFF);
             break;
     }
-
-    /* 3. Sincronizar indicadores visuales y ejecutar su tick */
-    UpdateCellularLed();
-    StatusIndicatorRunStep();
 }
 
-/*==================[external functions definition]==========================*/
-void app_main(void)
-{
-    printf("=== INICIANDO APLICACION COMUNICADOR DE PANICO ===\n");
+/* ============================================================================
+ * Bucle Principal de la Aplicación (ESP32 app_main)
+ * ============================================================================ */
+void app_main(void) {
+    printf("\n==================================================\n");
+    printf(" INICIALIZANDO SISTEMA DE ALERTA DE PANICO CELULAR\n");
+    printf("==================================================\n");
 
-    ComunicadorInit();
+    /* 1. Inicialización del Indicador de Estado (LEDs) */
+    if (StatusIndicator_Init()) {
+        printf("[OK] StatusIndicator inicializado correctamente.\n");
+    } else {
+        printf("[ERROR] Fallo al inicializar StatusIndicator.\n");
+    }
 
-    while (true)
-    {
-        ComunicadorRunStep();
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_STEP_PERIOD));
+    /* 2. Inicialización del Handler del Botón de Pánico */
+    panic_handler_err_t panic_err = PanicHandler_Init(OnPanicEvent);
+    if (panic_err == PANIC_HANDLER_OK) {
+        printf("[OK] PanicHandler inicializado con callback registrado.\n");
+    } else {
+        printf("[ERROR] Fallo al inicializar PanicHandler (Error: %d).\n", panic_err);
+    }
+
+    /* 3. Inicialización del Servicio de Red Celular (FSM + Queue + Task) */
+    cellular_net_err_t net_err = CellularNet_Init();
+    if (net_err == CELL_NET_OK) {
+        printf("[OK] CellularNet inicializado y tarea de red iniciada.\n");
+    } else {
+        printf("[ERROR] Fallo al inicializar CellularNet (Error: %d).\n", net_err);
+    }
+
+    /* 4. Intentar obtener el IMEI real del módem (opcional/best effort) */
+    vTaskDelay(pdMS_TO_TICKS(500)); // Pequeña espera para estabilización
+    if (CellularModemGetIMEI(g_device_imei, sizeof(g_device_imei))) {
+        printf("[OK] IMEI obtenido del módem: %s\n", g_device_imei);
+    } else {
+        printf("[INFO] No se pudo leer IMEI del módem. Usando ID por defecto: %s\n", g_device_imei);
+    }
+
+    printf("\n==================================================\n");
+    printf(" SISTEMA OPERATIVO Y EN BUCLE DE SUPERVISION\n");
+    printf(" Presione el botón de pánico para emitir alertas.\n");
+    printf("==================================================\n\n");
+
+    /* 5. Bucle Principal de Ejecución No Bloqueante */
+    for (;;) {
+        /* Pasada de la FSM de detección de pulsación y debounce */
+        PanicHandler_RunStep();
+
+        /* Pasada del temporizador y parpadeo de LEDs de estado */
+        StatusIndicator_RunStep();
+
+        /* Actualización del patrón LED según el estado de la red celular */
+        UpdateStatusLedFromNetwork();
+
+        /* Gestión del temporizador de apagado del LED de pánico */
+        if (g_panic_led_active) {
+            uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+            if ((now - g_panic_led_timer_ms) >= PANIC_LED_HOLD_TIME_MS) {
+                StatusIndicator_SetPanic(false);
+                g_panic_led_active = false;
+            }
+        }
+
+        /* Liberar tiempo de CPU para la tarea de red y el sistema */
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
-/*==================[end of file]============================================*/

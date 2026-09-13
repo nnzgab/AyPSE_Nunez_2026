@@ -1,85 +1,57 @@
 #ifndef CELLULAR_NET_H
 #define CELLULAR_NET_H
 
-#include "esp_err.h"
-#include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
-/* ============================================================
- * Estados de la red celular
- * ============================================================ */
+#define MAX_ALERT_PAYLOAD_SIZE  64
 
-typedef enum
-{
-    NET_STATUS_DISCONNECTED = 0,
-    NET_STATUS_REGISTERING,
-    NET_STATUS_READY,
-    NET_STATUS_SOCKET_CONNECTED
+typedef enum {
+    CELL_STATE_OFF = 0,
+    CELL_STATE_STARTING,
+    CELL_STATE_CONNECTING,
+    CELL_STATE_READY,
+    CELL_STATE_ERROR
+} cellular_net_state_t;
+
+typedef enum {
+    CELL_NET_OK = 0,
+    CELL_NET_ERR_BUSY,
+    CELL_NET_ERR_NOT_READY,
+    CELL_NET_ERR_TIMEOUT,
+    CELL_NET_ERR_PARAM
+} cellular_net_err_t;
+
+typedef struct {
+    cellular_net_state_t state;
+    uint8_t rssi;
+    uint8_t consecutive_errors;
+    uint32_t uptime_seconds;
 } cellular_net_status_t;
 
-/* ============================================================
- * Inicialización
- * ============================================================ */
+/**
+ * @brief Inicializa el hardware, crea la Cola de eventos y lanza la tarea de FreeRTOS.
+ */
+cellular_net_err_t CellularNet_Init(void);
 
 /**
- * @brief Inicializa el módem para utilizar la red celular.
- *
- * No configura ni activa todavía el PDP.
+ * @brief Solicita el envío inmediato de una trama. Agrega la alarma a la Cola de FreeRTOS.
  */
-esp_err_t CellularNetInit(void);
-
-/* ============================================================
- * Conexión a la red
- * ============================================================ */
+cellular_net_err_t CellularNet_SendAlertFrame(const uint8_t *payload, uint16_t length);
 
 /**
- * @brief Configura y activa el contexto PDP.
- *
- * @param apn APN del operador celular.
+ * @brief Estado de salud y métricas.
  */
-esp_err_t CellularNetConnectApn(const char *apn, const char *user, const char *password);
-
-/* ============================================================
- * TCP
- * ============================================================ */
+cellular_net_status_t CellularNet_GetStatus(void);
 
 /**
- * @brief Abre una conexión TCP.
- *
- * @param ip Dirección IP o servidor remoto.
- * @param port Puerto TCP.
+ * @brief Indica si la red está en READY para transmitir.
  */
-esp_err_t CellularNetOpenTcp(
-    const char *ip,
-    uint16_t port
-);
+bool CellularNet_IsReady(void);
 
-/**
- * @brief Envía datos por la conexión TCP.
+/* 
+ * TODO: Funciones pendientes de incorporación a la API pública
+ * - cellular_net_err_t CellularNet_DeInit(void); // Liberación de tareas/colas en FreeRTOS
  */
-esp_err_t CellularNetSendData(
-    const uint8_t *data,
-    size_t length
-);
-
-/**
- * @brief Recibe datos de la conexión TCP.
- */
-esp_err_t CellularNetReceiveData(
-    uint8_t *data,
-    size_t data_size,
-    size_t *received
-);
-
-/**
- * @brief Cierra la conexión TCP.
- */
-esp_err_t CellularNetCloseTcp(void);
-
-/* ============================================================
- * Estado
- * ============================================================ */
-
-cellular_net_status_t CellularNetGetStatus(void);
 
 #endif /* CELLULAR_NET_H */

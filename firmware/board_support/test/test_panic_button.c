@@ -1,158 +1,119 @@
+#include <stdio.h>
+
 #include "unity.h"
-
-#include "panic_button.h"
-#include "board_config.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include <stdio.h>
+#include "panic_button.h"
 
+/*==================[internal data definition]=================================*/
+static volatile int panic_interrupt_count = 0;
 
-#define BUTTON_WAIT_MS    100
-
-
-TEST_CASE("TEST-BSP-BUTTON-01 PanicButtonInit initializes button", "[bsp][panic][button]")
+/*==================[internal functions definition]==============================*/
+static void test_panic_button_callback(void *arg)
 {
-    bool result;
-    result = PanicButtonInit();
-    TEST_ASSERT_TRUE_MESSAGE(result, "PanicButtonInit() fallo");
-    vTaskDelay(pdMS_TO_TICKS(BUTTON_WAIT_MS));
+    panic_interrupt_count++;
 }
 
-TEST_CASE(
-    "TEST-BSP-BUTTON-02 PanicButtonIsPressed reads button state",
-    "[bsp][panic][button]"
-)
+/*==================[TEST-BSP-01]===============================================*/
+TEST_CASE("TEST-BSP-01 PanicButtonInit initializes GPIO and time base", "[panic_button][init]")
 {
+    printf("\n");
+    printf("========================================\n");
+    printf(" TEST-BSP-01 PANIC BUTTON INIT\n");
+    printf("========================================\n");
+
+    bool ok = PanicButtonInit();
+    TEST_ASSERT_TRUE_MESSAGE(ok, "PanicButtonInit deberia devolver true");
+}
+
+/*==================[TEST-BSP-02]===============================================*/
+TEST_CASE("TEST-BSP-02 PanicButtonIsPressed reflects physical button state", "[panic_button][state]")
+{
+    printf("\n");
+    printf("========================================\n");
+    printf(" TEST-BSP-02 PANIC BUTTON STATE\n");
+    printf("========================================\n");
+
     PanicButtonInit();
 
-    printf("\n");
-    printf("=====================================\n");
-    printf(" TEST PANIC BUTTON STATE\n");
-    printf("=====================================\n");
+    printf("\n========================================\n");
+    printf(" NO presione el boton (reposo).\n");
+    printf(" Verificando en 3 segundos...\n");
+    printf("========================================\n");
+    vTaskDelay(pdMS_TO_TICKS(3000));
 
-    printf("\nPresione el boton...\n");
+    TEST_ASSERT_FALSE_MESSAGE(PanicButtonIsPressed(),
+        "El boton deberia leerse como NO presionado en reposo");
+
+    printf("\n========================================\n");
+    printf(" MANTENGA PRESIONADO EL BOTON AHORA.\n");
+    printf(" Verificando en 3 segundos...\n");
+    printf("========================================\n");
+    vTaskDelay(pdMS_TO_TICKS(3000));
+
+    TEST_ASSERT_TRUE_MESSAGE(PanicButtonIsPressed(),
+        "El boton deberia leerse como presionado mientras se lo mantiene apretado");
+
+    printf("\nSUELTE EL BOTON.\n");
+    vTaskDelay(pdMS_TO_TICKS(2000));
+}
+
+/*==================[TEST-BSP-03]===============================================*/
+TEST_CASE("TEST-BSP-03 PanicButtonAttachInterrupt detects a single press filtering bounces", "[panic_button][interrupt]")
+{
+    printf("\n");
+    printf("========================================\n");
+    printf(" TEST-BSP-03 PANIC BUTTON INTERRUPT\n");
+    printf("========================================\n");
+
+    PanicButtonInit();
+    panic_interrupt_count = 0;
+
+    PanicButtonAttachInterrupt(test_panic_button_callback, NULL);
+
+    printf("\n========================================\n");
+    printf(" PRESIONE EL BOTON UNA SOLA VEZ, BREVEMENTE.\n");
+    printf(" Se espera exactamente 1 evento (el debounce\n");
+    printf(" de 30 ms debe filtrar los rebotes mecanicos).\n");
+    printf("========================================\n");
+
     vTaskDelay(pdMS_TO_TICKS(5000));
 
-    TEST_ASSERT_TRUE_MESSAGE(
-        PanicButtonIsPressed(),
-        "El boton deberia estar presionado"
-    );
-
-    printf("Deje el boton LIBERADO...\n");
-    vTaskDelay(pdMS_TO_TICKS(5000));
-
-    TEST_ASSERT_FALSE_MESSAGE(
-        PanicButtonIsPressed(),
-        "El boton deberia estar liberado"
-    );
+    printf("\nCantidad de eventos detectados: %d (esperado: 1)\n", panic_interrupt_count);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, panic_interrupt_count,
+        "Se esperaba exactamente 1 evento por una unica pulsacion (revisar debounce)");
 }
 
-
-
-TEST_CASE(
-    "TEST-BSP-BUTTON-03 PanicButton generates press event",
-    "[bsp][panic][button][interrupt]"
-)
+/*==================[TEST-BSP-04]===============================================*/
+TEST_CASE("TEST-BSP-04 PanicButtonAttachInterrupt counts multiple distinct presses", "[panic_button][interrupt]")
 {
     printf("\n");
-    printf("=====================================\n");
-    printf(" PANIC BUTTON INTERRUPT TEST\n");
-    printf("=====================================\n");
-
-    printf("\nInicializando boton...\n");
+    printf("========================================\n");
+    printf(" TEST-BSP-04 PANIC BUTTON MULTIPLE PRESSES\n");
+    printf("========================================\n");
 
     PanicButtonInit();
+    panic_interrupt_count = 0;
 
-    printf("GPIO23 = %d\n",
-           GPIORead(GPIO_PANIC_BTN));
+    PanicButtonAttachInterrupt(test_panic_button_callback, NULL);
 
-    printf("PanicButtonIsPressed = %d\n",
-           PanicButtonIsPressed());
+    printf("\n========================================\n");
+    printf(" PRESIONE EL BOTON 3 VECES, con al menos\n");
+    printf(" medio segundo de diferencia entre cada una.\n");
+    printf(" Tiene 8 segundos.\n");
+    printf("========================================\n");
 
-    bool initial_event = PanicButtonPressedEvent();
+    vTaskDelay(pdMS_TO_TICKS(8000));
 
-    printf("Evento inicial = %d\n",
-           initial_event);
+    printf("\nCantidad de eventos detectados: %d (esperado: 3)\n", panic_interrupt_count);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, panic_interrupt_count,
+        "La cantidad de eventos no coincide con la cantidad de pulsaciones realizadas");
 
-    TEST_ASSERT_FALSE_MESSAGE(
-        initial_event,
-        "Hay un evento pendiente antes de presionar el boton"
-    );
+    /* Dejamos la interrupcion apagada para no interferir con otros tests */
+    PanicButtonDetachInterrupt();
 
-    printf("\n-------------------------------------\n");
-    printf("Ahora presione el boton UNA VEZ\n");
-    printf("-------------------------------------\n");
-
-    vTaskDelay(
-        pdMS_TO_TICKS(5000)
-    );
-
-    bool event = PanicButtonPressedEvent();
-
-    printf("Evento despues de esperar = %d\n", event);
-
-    TEST_ASSERT_TRUE_MESSAGE(
-        event,
-        "No se detecto el evento del boton"
-    );
 }
 
-TEST_CASE(
-    "TEST-BSP-BUTTON-04 PanicButton debounce",
-    "[bsp][panic][button][debounce]"
-)
-{
-    PanicButtonInit();
+/*==================[end of file]============================================*/
 
-    /* Limpiamos cualquier evento viejo por precaución (lo que vimos en el error anterior) */
-    PanicButtonPressedEvent(); 
-
-    printf("\n");
-    printf("=====================================\n");
-    printf(" PANIC BUTTON DEBOUNCE TEST\n");
-    printf("=====================================\n");
-    printf("Presione y suelte el boton (tienes 5 segundos)...\n");
-
-    bool first_event = false;
-    int wait_time_ms = 0;
-    const int step_ms = 50; // Chequeamos cada 50 milisegundos
-
-    /* 
-     * POLLING CON TIMEOUT: 
-     * Revisamos el botón en ciclos cortos hasta un máximo de 5000 ms (5 segundos).
-     */
-    while (wait_time_ms < 5000) {
-        first_event = PanicButtonPressedEvent();
-        
-        if (first_event) {
-            printf(" -> ¡Pulsación detectada a los %d ms!\n", wait_time_ms);
-            break; // ¡Salimos del bucle inmediatamente!
-        }
-        
-        vTaskDelay(pdMS_TO_TICKS(step_ms));
-        wait_time_ms += step_ms;
-    }
-
-    /* 1. Verificamos que efectivamente se haya presionado el botón */
-    TEST_ASSERT_TRUE_MESSAGE(
-        first_event,
-        "Tiempo agotado: No se detecto la pulsacion en los 5 segundos"
-    );
-
-    /* 
-     * 2. Prueba de anti-rebote (Debounce)
-     * Ya detectamos el evento. Ahora esperamos un instante para permitir
-     * que la mecánica física del botón termine de vibrar (los rebotes suelen durar < 50ms).
-     */
-    vTaskDelay(pdMS_TO_TICKS(150)); 
-
-    bool second_event = PanicButtonPressedEvent();
-
-    /* 3. Verificamos que el ruido mecánico no haya generado eventos falsos */
-    TEST_ASSERT_FALSE_MESSAGE(
-        second_event,
-        "Una pulsacion genero mas de un evento (falla del algoritmo anti-rebote)"
-    );
-}

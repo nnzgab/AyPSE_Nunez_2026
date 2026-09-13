@@ -4,57 +4,28 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/*==================[typedef]================================================*/
-
-/**
- * @brief Estados visuales del módulo celular.
- */
-typedef enum
-{
+typedef enum {
     CELLULAR_STATUS_OFF = 0,
     CELLULAR_STATUS_STARTING,
-    CELLULAR_STATUS_SEARCHING,
-    CELLULAR_STATUS_READY,
-    CELLULAR_STATUS_TRANSMITTING
+    CELLULAR_STATUS_SEARCHING,     /* 200 ms ON  / 1800 ms OFF */
+    CELLULAR_STATUS_READY,         /* 1800 ms ON / 200 ms OFF  */
+    CELLULAR_STATUS_TRANSMITTING   /* 125 ms ON  / 125 ms OFF  */
 } cellular_status_t;
 
-/*==================[external functions declaration]=========================*/
+bool StatusIndicator_Init(void);
+void StatusIndicator_SetCellular(cellular_status_t status);
+cellular_status_t StatusIndicator_GetCellular(void);
+void StatusIndicator_SetPanic(bool active);
 
 /**
- * @brief Inicializa el middleware de indicadores.
+ * @brief Avanza la máquina de parpadeo de LED_QUECTEL.
  *
- * @return true si la inicialización fue correcta.
+ * Debe llamarse periódicamente desde el loop de la app (por ejemplo cada
+ * 10-50 ms). No bloquea: en cada llamada compara el tiempo transcurrido
+ * desde el último cambio de estado del LED contra el tiempo objetivo del
+ * patrón actual (según CELLULAR_STATUS_SEARCHING/READY/TRANSMITTING) y
+ * conmuta el LED solo si corresponde.
  */
-bool StatusIndicatorInit(void);
-
-/**
- * @brief Activa o desactiva el indicador de alarma.
- *
- * @param active true si existe una alarma pendiente.
- */
-void StatusIndicatorSetPanic(bool active);
-
-/**
- * @brief Establece el estado visual del módulo celular.
- *
- * @param status Estado actual del módulo celular.
- */
-void StatusIndicatorSetCellular(cellular_status_t status);
-
-/**
- * @brief Ejecuta un paso del patrón visual actual.
- *
- * Debe llamarse periódicamente desde la aplicación.
- */
-void StatusIndicatorRunStep(void);
-
-
-
-/**
- * @brief Obtiene el estado actual del indicador celular.
- *
- * @return Estado actual.
- */
-cellular_status_t StatusIndicatorGetCellular(void);
+void StatusIndicator_RunStep(void);
 
 #endif /* STATUS_INDICATOR_H */

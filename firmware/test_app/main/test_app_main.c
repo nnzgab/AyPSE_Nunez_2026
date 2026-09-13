@@ -18,71 +18,37 @@ void app_main(void)
 
     //unity_run_tests_by_tag("[uart]", false);
 
+    /* 1. Pruebas del módulo LED (etiqueta [led]) */
+    //printf("\n>>> BLOQUE 1: PRUEBAS DE LED <<<\n");
     //unity_run_tests_by_tag("[led]", false);
 
-    //unity_run_tests_by_tag("[button]", false);
+    /* 2. Pruebas del módulo Pulsador (etiqueta [panic_button]) */
+    //printf("\n>>> BLOQUE 2: PRUEBAS DE PULSADOR <<<\n");
+    //unity_run_tests_by_tag("[panic_button]", false);
 
-    /*BSP-cellular*/
-/*
-    unity_run_tests_by_tag("[poweron]", false);
+    /* 3. Pruebas del módulo Módem Celular (etiqueta [cellular]) */
+    //printf("\n>>> BLOQUE 3: PRUEBAS DE MODEM CELULAR <<<\n");
+    unity_run_tests_by_tag("[cellular]", false);
 
-    unity_run_tests_by_tag("[at]", false);
-
-    unity_run_tests_by_tag("[echo]", false);
-
-    unity_run_tests_by_tag("[full]", false);
-  
-    unity_run_tests_by_tag("[imsi]", false);
-  
-    unity_run_tests_by_tag("[network]", false);
-
-    unity_run_tests_by_tag("[cereg]", false);
-
-    unity_run_tests_by_tag("[csq]", false);
-
-    unity_run_tests_by_tag("[cops]", false);
-
-    unity_run_tests_by_tag("[pdp]", false);
-
-    unity_run_tests_by_tag("[act-pdp]", false);
-
-    unity_run_tests_by_tag("[pdp-status]", false);
-
-    //unity_run_tests_by_tag("[tcp]", false);
-  
-    //unity_run_tests_by_tag("[socket]", false);
-  
-    //unity_run_tests_by_tag("[sendrecv]", false);
-
-    //unity_run_tests_by_tag("[sendrecv_]", false);
-
-    //unity_run_tests_by_tag("[send_]", false);
-
-    unity_run_tests_by_tag("[receivetcp_]", false);
-
-    unity_run_tests_by_tag("[power-off]", false);
-*/
-    //middleware
+    /* 4. Pruebas del módulo Status Indicator (etiqueta [status_indicator]) */
+    //printf("\n>>> BLOQUE 4: PRUEBAS DE STATUS INDICATOR <<<\n");
     //unity_run_tests_by_tag("[status_indicator]", false);
 
+
+    /* 5. Pruebas del módulo Panic Handler (etiqueta [panic_handler]) */
+    //printf("\n>>> BLOQUE 5: PRUEBAS DE PANIC HANDLER <<<\n");
     //unity_run_tests_by_tag("[panic_handler]", false);
 
-    //unity_run_tests_by_tag("[demo]", false);
 
-    //unity_run_tests_by_tag("[combined-test]", false);
-    //unity_run_tests_by_tag("[combined-test_]", false);
-    //unity_run_tests_by_tag("[cellular_modem]", false);
-    //unity_run_tests_by_tag("[test_command]", false);
-    //unity_run_tests_by_tag("[test_command_2]", false);
-    //unity_run_tests_by_tag("[test_command_3]", false);
+    /* 6. Pruebas del módulo Event Frame (etiqueta [event_frame]) */
+    //printf("\n>>> BLOQUE 6: PRUEBAS DE EVENT FRAME <<<\n"); 
+    //unity_run_tests_by_tag("[event_frame]", false);
 
-    //unity_run_tests_by_tag("[cellular_modem_test]", false);
-    
+
+    /* 7. Pruebas del módulo Cellular Net (etiqueta [cellular_net]) */
+    //printf("\n>>> BLOQUE 7: PRUEBAS DE CELLULAR NET <<<\n");
     //unity_run_tests_by_tag("[cellular_net]", false);
-    //unity_run_tests_by_tag("[cellular+led+boton]", false);
-    //unity_run_tests_by_tag("[prueba_frame]", false);
-    //unity_run_tests_by_tag("[fullfull]", false);
-    unity_run_tests_by_tag("[power-off]", false);
+    
 
 
 
@@ -103,7 +69,7 @@ void app_main(void)
     printf("========================================\n");
 
     printf("Enter '*' to run all tests\n");
-    printf("Enter a tag (ej: [uart] o [gpio]) to filter tests\n\n");
+    printf("Enter a tag (ej: [uart], [gpio], [led], [panic_button] o [cellular]) to filter tests\n\n");
 
     unity_run_menu();
 
