@@ -14,8 +14,8 @@
 #define TEST_PASSWORD               "datos"
 
 /* Reemplazar con los datos provistos por Pinggy o tu servidor de prueba */
-#define TEST_SERVER_IP              "wmyas-190-183-23-94.run.pinggy-free.link"
-#define TEST_SERVER_PORT            46279
+#define TEST_SERVER_IP              "kkgqa-190-183-23-94.run.pinggy-free.link"
+#define TEST_SERVER_PORT            41243
 #define TEST_SOCKET_PROTO           "TCP"
 
 /* Tiempo de espera amplio (30s) para permitir respuesta manual en el servidor */

@@ -15,8 +15,8 @@
 #define APN_USER                "datos"
 #define APN_PASS                "datos"
 
-#define SERVER_IP               "yrjik-190-183-23-94.run.pinggy-free.link"
-#define SERVER_PORT             32865
+#define SERVER_IP               "kvxlv-190-183-23-94.run.pinggy-free.link"
+#define SERVER_PORT             33433
 #define SOCKET_PROTO            "TCP"
 
 #define QUEUE_LENGTH            5

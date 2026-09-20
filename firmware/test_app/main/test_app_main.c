@@ -13,10 +13,9 @@ void app_main(void)
     printf("========================================\n");
 
     UNITY_BEGIN();
-
-    //unity_run_tests_by_tag("[gpio]", false);
-
-    //unity_run_tests_by_tag("[uart]", false);
+    /* 0. Pruebas de drivers HAL (etiqueta [drivers_hal]) */
+    //printf("\n>>> BLOQUE 0: PRUEBAS DE DRIVERS HAL <<<\n");
+    //unity_run_tests_by_tag("[drivers_hal]", false);
 
     /* 1. Pruebas del módulo LED (etiqueta [led]) */
     //printf("\n>>> BLOQUE 1: PRUEBAS DE LED <<<\n");
@@ -27,7 +26,7 @@ void app_main(void)
     //unity_run_tests_by_tag("[panic_button]", false);
 
     /* 3. Pruebas del módulo Módem Celular (etiqueta [cellular]) */
-    //printf("\n>>> BLOQUE 3: PRUEBAS DE MODEM CELULAR <<<\n");
+    printf("\n>>> BLOQUE 3: PRUEBAS DE MODEM CELULAR <<<\n");
     unity_run_tests_by_tag("[cellular]", false);
 
     /* 4. Pruebas del módulo Status Indicator (etiqueta [status_indicator]) */

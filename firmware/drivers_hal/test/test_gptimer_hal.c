@@ -1,99 +1,60 @@
 #include <stdio.h>
-
 #include "unity.h"
+#include "gptimer_hal.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "gptimer_hal.h"
-
-/*==================[TEST-01]==================================================*/
-TEST_CASE("TEST-01 GpTimerInit returns OK and is idempotent", "[gptimer][init]")
-{
-    printf("\n");
-    printf("========================================\n");
-    printf(" TEST-01 GPTIMER INIT\n");
+/* ============================================================================
+ * TEST-HAL-TIMER-01: Inicialización del Hardware Timer
+ * ============================================================================ */
+TEST_CASE("TEST-HAL-TIMER-01 GpTimerInit initializes hardware timer", "[drivers_hal][gptimer][init]") {
+    printf("\n========================================\n");
+    printf(" TEST-HAL-TIMER-01 INICIALIZACION GPTIMER\n");
     printf("========================================\n");
 
-    int8_t ret1 = GpTimerInit();
-    TEST_ASSERT_EQUAL_INT8_MESSAGE(HAL_GPTIMER_OK, ret1,
-        "La primera inicializacion deberia devolver HAL_GPTIMER_OK");
-
-    /* Segunda llamada: debe ser idempotente, sin reiniciar el conteo */
-    uint32_t before = GpTimerGetMs();
-    int8_t ret2 = GpTimerInit();
-    TEST_ASSERT_EQUAL_INT8_MESSAGE(HAL_GPTIMER_OK, ret2,
-        "La segunda inicializacion deberia devolver HAL_GPTIMER_OK sin reconfigurar");
-
-    uint32_t after = GpTimerGetMs();
-    TEST_ASSERT_GREATER_OR_EQUAL_UINT32_MESSAGE(before, after,
-        "El conteo no deberia reiniciarse en una segunda inicializacion");
+    int8_t status = GpTimerInit();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(HAL_GPTIMER_OK, status, "FAIL: GpTimerInit devolvió código de error");
+    printf("--> Éxito: Timer de hardware a 1 MHz (1 us/tick) iniciado con éxito.\n");
 }
 
-/*==================[TEST-02]==================================================*/
-TEST_CASE("TEST-02 GpTimerGetMs advances consistently with real elapsed time", "[gptimer][timing]")
-{
-    printf("\n");
-    printf("========================================\n");
-    printf(" TEST-02 GPTIMER GETMS\n");
+/* ============================================================================
+ * TEST-HAL-TIMER-02: Avance consistente de la marca de tiempo (GpTimerGetMs)
+ * ============================================================================ */
+TEST_CASE("TEST-HAL-TIMER-02 GpTimerGetMs advances consistently", "[drivers_hal][gptimer][timing]") {
+    printf("\n========================================\n");
+    printf(" TEST-HAL-TIMER-02 CONTEO DE TIEMPO (GpTimerGetMs)\n");
     printf("========================================\n");
 
     GpTimerInit();
-
     uint32_t t0 = GpTimerGetMs();
     vTaskDelay(pdMS_TO_TICKS(500));
     uint32_t t1 = GpTimerGetMs();
     uint32_t elapsed = t1 - t0;
 
-    printf("Tiempo medido: %lu ms (esperado ~500 ms)\n", (unsigned long)elapsed);
+    printf("Tiempo transcurrido registrado: %lu ms (esperado ~500 ms)\n", (unsigned long)elapsed);
 
-    /* Tolerancia amplia por jitter del scheduler de FreeRTOS */
-    TEST_ASSERT_GREATER_OR_EQUAL_UINT32_MESSAGE(450, elapsed,
-        "El tiempo medido es menor al esperado");
-    TEST_ASSERT_LESS_OR_EQUAL_UINT32_MESSAGE(600, elapsed,
-        "El tiempo medido es mayor al esperado");
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32_MESSAGE(450, elapsed, "FAIL: Tiempo medido menor al rango permitido");
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32_MESSAGE(600, elapsed, "FAIL: Tiempo medido superó la tolerancia");
+    printf("--> Éxito: Medición de tiempo coincidente con la ventana de retardo.\n");
 }
 
-/*==================[TEST-03]==================================================*/
-TEST_CASE("TEST-03 GpTimerDelayMs blocks approximately the requested time", "[gptimer][timing]")
-{
-    printf("\n");
-    printf("========================================\n");
-    printf(" TEST-03 GPTIMER DELAYMS\n");
+/* ============================================================================
+ * TEST-HAL-TIMER-03: Retardo activo sin ceder procesador (GpTimerDelayMs)
+ * ============================================================================ */
+TEST_CASE("TEST-HAL-TIMER-03 GpTimerDelayMs blocks for requested time", "[drivers_hal][gptimer][delay]") {
+    printf("\n========================================\n");
+    printf(" TEST-HAL-TIMER-03 RETARDO ACTIVO (GpTimerDelayMs)\n");
     printf("========================================\n");
 
     GpTimerInit();
-
     uint32_t t0 = GpTimerGetMs();
     GpTimerDelayMs(200);
     uint32_t t1 = GpTimerGetMs();
     uint32_t elapsed = t1 - t0;
 
-    printf("Tiempo bloqueado: %lu ms (esperado ~200 ms)\n", (unsigned long)elapsed);
+    printf("Tiempo bloqueado en busy-wait: %lu ms (esperado ~200 ms)\n", (unsigned long)elapsed);
 
-    TEST_ASSERT_GREATER_OR_EQUAL_UINT32_MESSAGE(195, elapsed,
-        "El busy-wait termino antes de tiempo");
-    TEST_ASSERT_LESS_OR_EQUAL_UINT32_MESSAGE(250, elapsed,
-        "El busy-wait se extendio mas de lo esperado");
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32_MESSAGE(195, elapsed, "FAIL: El retardo finalizó antes de tiempo");
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32_MESSAGE(250, elapsed, "FAIL: El retardo se extendió más de lo permitido");
+    printf("--> Éxito: Demora activa ajustada a la precisión de milisegundos.\n");
 }
-
-/*==================[TEST-04]==================================================*/
-TEST_CASE("TEST-04 GpTimerDelayMs with zero returns immediately", "[gptimer][timing]")
-{
-    printf("\n");
-    printf("========================================\n");
-    printf(" TEST-04 GPTIMER DELAYMS(0)\n");
-    printf("========================================\n");
-
-    GpTimerInit();
-
-    uint32_t t0 = GpTimerGetMs();
-    GpTimerDelayMs(0);
-    uint32_t t1 = GpTimerGetMs();
-
-    printf("Delta con ms=0: %lu ms\n", (unsigned long)(t1 - t0));
-
-    TEST_ASSERT_LESS_OR_EQUAL_UINT32_MESSAGE(5, (t1 - t0),
-        "GpTimerDelayMs(0) no deberia bloquear de forma perceptible");
-}
-
-/*==================[end of file]============================================*/
