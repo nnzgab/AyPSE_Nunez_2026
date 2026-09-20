@@ -1,52 +1,42 @@
-#ifndef GPTIMER_HAL_H
-#define GPTIMER_HAL_H
+#ifndef DRIVERS_HAL_GPTIMER_HAL_H_
+#define DRIVERS_HAL_GPTIMER_HAL_H_
 
 /** @defgroup hal HAL
  *  @brief Hardware Abstraction Layer.
  *  @{
  *  @defgroup gptimer_hal GPTimer HAL
- *  @brief General purpose timer driver for ESP32-C6.
+ *  @brief General Purpose Timer Hardware Abstraction Layer driver.
  *  @{
- *
- * @section genDesc General Description
- *
- * Provee una base de tiempo en milisegundos para las capas superiores,
- * ocultando el uso del driver gptimer de ESP-IDF. Ninguna capa por encima
- * de drivers_hal debe incluir <driver/gptimer.h> directamente.
- *
- * @note El contador satura (overflow) luego de aproximadamente 49 días
- * de operación continua (uint32_t en milisegundos). Las comparaciones de
- * tiempo transcurrido deben hacerse por resta (unsigned wraparound),
- * nunca comparando valores absolutos.
- *
- * 
- * @section changelog
- *
- * |   Date     | Description                                            |
- * |:----------:|:-------------------------------------------------------|
- * |  | Document creation                                      |
- *
- **/
+ *  @section genDesc General Description
+ *  Header file for the General Purpose Timer Hardware Abstraction Layer module.
+ *  @author Nuñez Gabriel Eduardo (nunezgabrieleduardo@gmail.com)
+ *  @section changelog
+ *  |   Date     | Description                                            |
+ *  |:----------:|:-------------------------------------------------------|
+ *  | 20/10/2023 | Document creation                                      |
+ */
 
 /*==================[inclusions]=============================================*/
 #include <stdint.h>
+#include <stdbool.h>
 
-/*==================[macros]=================================================*/
-#define HAL_GPTIMER_OK      (0)   /**< Operación exitosa */
-#define HAL_GPTIMER_ERROR   (-1)  /**< Error genérico */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*==================[macros and definitions]=================================*/
+#define HAL_GPTIMER_OK     0
+#define HAL_GPTIMER_ERROR -1
 
 /*==================[typedef]================================================*/
 
 /*==================[external data declaration]==============================*/
 
 /*==================[external functions declaration]=========================*/
-
 /**
  * @brief Inicializa el GPTimer con resolución de 1 µs.
- *
- * Idempotente: si ya fue inicializado retorna HAL_GPTIMER_OK sin
+ * si ya fue inicializado retorna HAL_GPTIMER_OK sin
  * reconfigurar ni reiniciar el conteo.
- *
  * @return HAL_GPTIMER_OK en éxito, HAL_GPTIMER_ERROR en fallo.
  */
 int8_t GpTimerInit(void);
@@ -54,7 +44,6 @@ int8_t GpTimerInit(void);
 /**
  * @brief Retorna el tiempo transcurrido desde la inicialización en
  * milisegundos.
- *
  * @return Milisegundos transcurridos (uint32_t).
  */
 uint32_t GpTimerGetMs(void);
@@ -62,15 +51,20 @@ uint32_t GpTimerGetMs(void);
 /**
  * @brief Espera bloqueante (busy-wait) por la cantidad de milisegundos
  * indicada.
- *
  * No cede el CPU al scheduler. Adecuado solo para retardos cortos durante
  * inicialización (por ejemplo, el pulso de PWRKEY del módulo celular).
  * No debe usarse dentro de una ISR ni en el camino del botón de pánico.
- *
  * @param ms Milisegundos a esperar (0 retorna inmediatamente).
  */
 void GpTimerDelayMs(uint32_t ms);
 
-#endif /* #ifndef GPTIMER_HAL_H */
+/** @} */
+/** @} */
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* DRIVERS_HAL_GPTIMER_HAL_H_ */
 
 /*==================[end of file]============================================*/
