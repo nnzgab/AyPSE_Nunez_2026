@@ -24,38 +24,60 @@ Sistema embebido de emisión remota de alertas de pánico desarrollado sobre el 
 
 #### Estructura del proyecto
 ```text
-AyPSE_Nunez_2026/
-├── CMakeLists.txt        <- raíz del proyecto
-├── .gitignore
-├── LICENSE
-├── README.md             <- documentación principal del repositorio
-├── banner.png
-├── esp32c6.svd
-├── documentación/        <- guías e instructivos de la asignatura
-│   ├── compilación.md
-│   ├── depuración.md
-│   ├── guia_de_estilo.md
-│   ├── instalación.md
-│   ├── proyecto_nuevo.md
-│   ├── repositorio.md
-│   └── repositorio2.md
-└── firmware/             <- código fuente organizado en 5 capas
-    ├── AyPSE.code-workspace
-    ├── README.md
-    ├── apps/             <- componente 'apps' (capa de Aplicación)
-    │   └── 0_comunicador/
-    │       └── main/
-    │           └── 0_comunicador.c
-    ├── board_support/    <- componente 'board' (drivers BSP: módem, LEDs, botón)
-    │   ├── inc/          <- led.h, panic_button.h, cellular_modem.h, board_clock.h
-    │   └── src/          <- led.c, panic_button.c, cellular_modem.c, board_clock.c
-    ├── drivers_hal/      <- capa HAL (periféricos internos del ESP32-C6)
-    │   ├── inc/          <- gpio_hal.h, uart_hal.h, gptimer_hal.h
-    │   └── src/          <- gpio_hal.c, uart_hal.c, gptimer_hal.c
-    ├── middleware/       <- componente 'middleware' (servicios lógicos)
-    │   ├── inc/          <- panic_handler.h, status_indicator.h, event_frame.h, cellular_net.h
-    │   └── src/          <- panic_handler.c, status_indicator.c, event_frame.c, cellular_net.c
-    └── test_app/         <- harness de pruebas unitarias Unity
+firmware/
+├── apps/
+│   └── 0_comunicador/
+│       └── main/
+│           └── 0_comunicador.c
+├── middleware/
+│   ├── inc/
+│   │   ├── cellular_net.h
+│   │   ├── event_frame.h
+│   │   ├── panic_handler.h
+│   │   └── status_indicator.h
+│   ├── src/
+│   │   ├── cellular_net.c
+│   │   ├── event_frame.c
+│   │   ├── panic_handler.c
+│   │   └── status_indicator.c
+│   └── test/
+│       ├── test_cellular_net.c
+│       ├── test_event_frame.c
+│       ├── test_panic_handler.c
+│       └── test_status_indicator.c
+├── board_support/
+│   ├── inc/
+│   │   ├── board_clock.h
+│   │   ├── board_config.h
+│   │   ├── cellular_modem.h
+│   │   ├── led.h
+│   │   └── panic_button.h
+│   ├── src/
+│   │   ├── board_clock.c
+│   │   ├── cellular_modem.c
+│   │   ├── led.c
+│   │   └── panic_button.c
+│   └── test/
+│       ├── test_cellular.c
+│       ├── test_led.c
+│       └── test_panic_button.c
+├── drivers_hal/
+│   ├── inc/
+│   │   ├── gpio_hal.h
+│   │   ├── gptimer_hal.h
+│   │   └── uart_hal.h
+│   ├── src/
+│   │   ├── gpio_hal.c
+│   │   ├── gptimer_hal.c
+│   │   └── uart_hal.c
+│   └── test/
+│       ├── test_gpio_hal.c
+│       ├── test_gptimer_hal.c
+│       └── test_uart_hal.c
+└── test_app/
+    └── main/
+        └── test_app_main.c
+
 ```
 
 #### Módulos
