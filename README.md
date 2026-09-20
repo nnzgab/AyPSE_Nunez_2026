@@ -14,8 +14,7 @@ A continuación se muestra cómo queda el protoboard con las placas armadas y li
 
 <img src="https://github.com/nnzgab/AyPSE_Nunez_2026/blob/prueba_02_arregando_BSP/documentaci%C3%B3n/im%C3%A1genes/prototipo_small.jpg?raw=true" alt="Montaje del proyecto" width="50%">
 
-[Video del sistema completo funcionando](https://www.youtube.com/watch?v=ejemplo_demostracion_tp4)
-
+[Video del sistema completo funcionando]([https://www.youtube.com/watch?v=tu_enlace_aqui](https://youtube.com/shorts/6NaJSEQukmM?feature=share)
 #### Diagrama general del sistema
 ```text
 [ BOTÓN DE PÁNICO ] ──(GPIO23)──> [ ESP32-C6 MCU ] ──(UART1: 18/19)──> [ QUECTEL EG915U-LA ]
