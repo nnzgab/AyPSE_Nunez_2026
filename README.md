@@ -8,6 +8,11 @@
 
 ##### Comunicador Celular Autónomo de Alerta de Pánico (ESP32-C6 + Quectel EG915U)
 Sistema embebido de emisión remota de alertas de pánico desarrollado sobre el microcontrolador **ESP32-C6** (placa DevKitC-1) y el módem celular **Quectel EG915U-LA** (LTE Cat 1 bis). El dispositivo detecta la pulsación física de un botón de pánico mediante interrupción por flanco descendente con filtro antirebote no bloqueante de 50 ms, lee el IMEI real del hardware (`AT+CGSN`), empaqueta los datos de la alerta en formato texto CSV (`01,IMEI,SECUENCIA\r\n`) o binario estructurado con encabezado `0xAA55`, y transmite la información hacia un servidor TCP remoto a través de una tarea dedicada en FreeRTOS (`cell_net_task`) con cola de eventos (`xQueue`). Dispone de señalización visual mediante LEDs para monitorear los estados de la red celular y la activación de la alerta.
+## Montaje del Hardware
+
+A continuación se muestra cómo queda el protoboard con las placas armadas y listas para ejecutar el firmware:
+
+<img src="https://github.com/nnzgab/AyPSE_Nunez_2026/blob/prueba_02_arregando_BSP/documentaci%C3%B3n/im%C3%A1genes/prototipo_small.jpg?raw=true" alt="Montaje del proyecto" width="50%">
 
 [Video del sistema completo funcionando](https://www.youtube.com/watch?v=ejemplo_demostracion_tp4)
 
