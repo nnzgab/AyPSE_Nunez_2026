@@ -1,37 +1,87 @@
 <p align="center">
-<img src="banner.png">
-<br>
-<img alt="GitHub forks" src="https://img.shields.io/github/forks/prototipado/Curso_AyPSE_ESE?style=flat&logo=github">
-<img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/t/prototipado/Curso_AyPSE_ESE?style=flat&logo=github">
-<img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/prototipado/Curso_AyPSE_ESE?style=flat&logo=github">
-<img alt="GitHub last commit" src="https://img.shields.io/github/repo-size/prototipado/Curso_AyPSE_ESE?style=flat&logo=github">
+  <img src="banner.png" alt="Banner del Proyecto">
+  <br>
 </p>
 
-# Curso: Arquitectura y Programación de Sistemas Embebidos
+### Arquitectura y Programación de Sistemas Embebidos 2026
+#### **Autor:** Nuñez Gabriel Eduardo (nunezgabrieleduardo@gmail.com)
 
-En este Repositorio se almacena el Firmware que se utilizará de base durante el cursado de la asignatura Arquitectura y Programación de Sistemas Embebidos.
-El mismo está pensado para ser utilizado con la placa ESP32-C6-DevKitC-1.
+##### Comunicador Celular Autónomo de Alerta de Pánico (ESP32-C6 + Quectel EG915U)
+Sistema embebido de emisión remota de alertas de pánico desarrollado sobre el microcontrolador **ESP32-C6** (placa DevKitC-1) y el módem celular **Quectel EG915U-LA** (LTE Cat 1 bis). El dispositivo detecta la pulsación física de un botón de pánico mediante interrupción por flanco descendente con filtro antirebote no bloqueante de 50 ms, lee el IMEI real del hardware (`AT+CGSN`), empaqueta los datos de la alerta en formato texto CSV (`01,IMEI,SECUENCIA\r\n`) o binario estructurado con encabezado `0xAA55`, y transmite la información hacia un servidor TCP remoto a través de una tarea dedicada en FreeRTOS (`cell_net_task`) con cola de eventos (`xQueue`). Dispone de señalización visual mediante LEDs para monitorear los estados de la red celular y la activación de la alerta.
 
-## Primeros pasos
+[Video del sistema completo funcionando](https://www.youtube.com/watch?v=ejemplo_demostracion_tp4)
 
-1. [Instalación](./documentación/instalación.md)
-2. [Creación de Repositorio](./documentación/repositorio.md)
-3. [Compilación](./documentación/compilación.md)
-4. [Grabación y Depuración](./documentación/depuración.md)
-5. [Proyecto nuevo](./documentación/proyecto_nuevo.md)
-6. [Actualización de Repositorio](./documentación/repositorio2.md)
-7. [Estructura de Firmware](./firmware/README.md)
-8. [Guía de Estilo de Código](./documentación/guia_de_estilo.md)
+#### Diagrama general del sistema
+```text
+[ BOTÓN DE PÁNICO ] ──(GPIO23)──> [ ESP32-C6 MCU ] ──(UART1: 18/19)──> [ QUECTEL EG915U-LA ]
+                                        │                                      │
+[ LED PANIC (GPIO4) ] <─────────────────┤ (Control PWRKEY: GPIO6) ─────────────┤
+[ LED QUECTEL (GPIO5) ] <──────────────┘                                      ▼
+                                                                    [ RED CELULAR LTE Cat 1 ]
+                                                                               │
+[ SERVIDOR PYTHON / PINGGY (Puerto 8089) ] <──────────(Socket TCP/IP)──────────┘
+```
 
-## Enlaces de Interés
+#### Estructura del proyecto
+```text
+AyPSE_Nunez_2026/
+├── CMakeLists.txt        <- raíz del proyecto
+├── .gitignore
+├── LICENSE
+├── README.md             <- documentación principal del repositorio
+├── banner.png
+├── esp32c6.svd
+├── documentación/        <- guías e instructivos de la asignatura
+│   ├── compilación.md
+│   ├── depuración.md
+│   ├── guia_de_estilo.md
+│   ├── instalación.md
+│   ├── proyecto_nuevo.md
+│   ├── repositorio.md
+│   └── repositorio2.md
+└── firmware/             <- código fuente organizado en 5 capas
+    ├── AyPSE.code-workspace
+    ├── README.md
+    ├── apps/             <- componente 'apps' (capa de Aplicación)
+    │   └── 0_comunicador/
+    │       └── main/
+    │           └── 0_comunicador.c
+    ├── board_support/    <- componente 'board' (drivers BSP: módem, LEDs, botón)
+    │   ├── inc/          <- led.h, panic_button.h, cellular_modem.h, board_clock.h
+    │   └── src/          <- led.c, panic_button.c, cellular_modem.c, board_clock.c
+    ├── drivers_hal/      <- capa HAL (periféricos internos del ESP32-C6)
+    │   ├── inc/          <- gpio_hal.h, uart_hal.h, gptimer_hal.h
+    │   └── src/          <- gpio_hal.c, uart_hal.c, gptimer_hal.c
+    ├── middleware/       <- componente 'middleware' (servicios lógicos)
+    │   ├── inc/          <- panic_handler.h, status_indicator.h, event_frame.h, cellular_net.h
+    │   └── src/          <- panic_handler.c, status_indicator.c, event_frame.c, cellular_net.c
+    └── test_app/         <- harness de pruebas unitarias Unity
+```
 
-* [Campus Virtual](https://distancia.ingenieria.uner.edu.ar/course/view.php?id=43)
-* [IDF API para ESP32-C6](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/api-reference/index.html)
-* [Guía de Usuario de ESP32-C6-DevKitC-1](https://docs.espressif.com/projects/espressif-esp-dev-kits/en/latest/esp32c6/esp32-c6-devkitc-1/user_guide.html)
+#### Módulos
+##### apps (Aplicación)
+* **`app_main()`**: Inicializa los módulos de estado (`StatusIndicator_Init`), el manejador del botón de pánico (`PanicHandler_Init`), ejecuta la cuenta regresiva de estabilización de energía e inicializa el servicio celular (`CellularNet_Init`). En su bucle principal no bloqueante atiende `PanicHandler_RunStep()`, `StatusIndicator_RunStep()`, `UpdateStatusLedFromNetwork()` y gestiona el temporizador de apagado del LED de pánico.
+* **`OnPanicEvent()`**: Callback invocado al confirmarse la pulsación del botón; activa la indicación visual de pánico, obtiene el IMEI real, empaqueta la trama CSV y la deposita en la cola de transmisión de la red celular.
 
-## Autores
+##### middleware (Middleware)
+* **`panic_handler`**: Captura la interrupción física del botón de pánico (`GPIO23`), realiza la validación no bloqueante de debounce (50 ms) y gestiona la secuencia incremental de alertas.
+* **`status_indicator`**: Controla y alterna de manera no bloqueante los patrones de parpadeo del LED indicador de módem (`GPIO5`) según el estado de la red (SEARCHING, READY, TRANSMITTING) y el estado del LED de pánico (`GPIO4`).
+* **`event_frame`**: Encargado de la serialización de datos de eventos (`event_data_t`) en formato texto CSV (`01,IMEI,SECUENCIA\r\n`) or binario estructurado con encabezado `0xAA55`.
+* **`cellular_net`**: Administra la Máquina de Estados Finitos (FSM) de conectividad celular LTE (STARTING, CONNECTING, READY, ERROR), gestiona el contexto PDP (`AT+QIACT`), lee el IMEI del hardware y procesa la cola FreeRTOS (`xQueue`) para transmitir tramas por socket TCP en segundo plano (`cell_net_task`).
 
-* Juan Manuel Reta (<juan.reta@uner.edu.ar>)
-* Eduardo Filomena (<eduardo.filomena@uner.edu.ar>)
-* Juan Ignacio Cerrudo (<juan.cerrudo@uner.edu.ar>)
-* Albano Peñalva (<albano.penalva@uner.edu.ar>)
+##### board_support (BSP)
+* **`cellular_modem`**: Implementa los comandos AT y el control por hardware del módem Quectel EG915U-LA vía UART1 (pulso PWRKEY en `GPIO6`, verificación de inicio, estado SIM/red, lectura IMEI y apertura/envío/cierre de sockets TCP).
+* **`panic_button`**: Maneja el pulsador físico de pánico en `GPIO23`, configurando la interrupción por flanco descendente y filtrado inicial de hardware.
+* **`led`**: Abstrae el encendido, apagado y conmutación de los LEDs de estado de pánico (`GPIO4`) y módem (`GPIO5`).
+* **`board_clock`**: Provee servicios de marcas de tiempo e intervalos en milisegundos basados en el temporizador GPTimer de hardware.
+
+##### drivers_hal (HAL)
+* **`gpio_hal`**: Encapsula la configuración de dirección, nivel lógico e instalación de interrupciones sobre los pines GPIO del ESP32-C6.
+* **`uart_hal`**: Abstrae la inicialización y comunicación serie bidireccional por UART1 (`GPIO18` TX / `GPIO19` RX) a 115200 baudios.
+* **`gptimer_hal`**: Abstrae el temporizador GPTimer del ESP32-C6 configurado a 1 MHz (resolución de 1 µs) para la obtención de tiempos en milisegundos y retardos.
+
+#### Imágenes
+| | |
+|:---:|:---:|
+| ![Prototipo Físico Integrado](documentación/imágenes/prototipo_integrado.png) | ![Consola Serie / Logs](documentación/imágenes/log_consola_tcp.png) |
+| *Placa ESP32-C6 conectada por UART1 al módem Quectel EG915U-LA y pulsador en protoboard* | *Log real por consola serie mostrando la conexión LTE y la transmisión de trama TCP* |
