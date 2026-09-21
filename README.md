@@ -23,16 +23,11 @@ Hacé clic en la imagen a continuación para ver el funcionamiento del sistema:
 </a>
 
 
-#### Diagrama general del sistema
-```text
-[ BOTÓN DE PÁNICO ] ──(GPIO23)──> [ ESP32-C6 MCU ] ──(UART1: 18/19)──> [ QUECTEL EG915U-LA ]
-                                        │                                      │
-[ LED PANIC (GPIO4) ] <─────────────────┤ (Control PWRKEY: GPIO6) ─────────────┤
-[ LED QUECTEL (GPIO5) ] <──────────────┘                                      ▼
-                                                                    [ RED CELULAR LTE Cat 1 ]
-                                                                               │
-[ SERVIDOR PYTHON / PINGGY (Puerto 8089) ] <──────────(Socket TCP/IP)──────────┘
-```
+### Diagrama general del sistema
+
+A continuación se detalla la arquitectura de hardware y firmware del proyecto:
+
+<img src="https://github.com/nnzgab/AyPSE_Nunez_2026/blob/prueba_02_arregando_BSP/documentaci%C3%B3n/im%C3%A1genes/diagrama_bloque.png?raw=true" alt="Diagrama general del sistema" width="700">
 
 #### Estructura del proyecto
 ```text
