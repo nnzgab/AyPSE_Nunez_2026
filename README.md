@@ -63,7 +63,7 @@ Para respaldar la validación funcional en hardware real, se grabó un video dem
 
 ## Arquitectura del Sistema
 
-La implementación se organiza mediante una arquitectura por capas estricta: 
+La implementación se organiza mediante una arquitectura por capas estricta: <br>
 **Aplicación → Middleware → Board Support → Driver HAL → ESP-IDF**. Esta separación permite mantener aislada la lógica de la aplicación respecto de los detalles específicos del hardware.
 
 <p align="center">
