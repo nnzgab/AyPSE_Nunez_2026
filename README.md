@@ -31,6 +31,7 @@ El prototipo físico fue ensamblado y probado sobre el banco de trabajo utilizan
 * **Interfaz UART:** Bus serie UART1 configurado a 115200 baudios (TX en GPIO18, RX en GPIO19).
 * **Línea PWRKEY:** Transistor de control conectado a GPIO6 para la secuencia de encendido por pulso.
 * **Entrada de Alerta:** Pulsador de pánico con resistencia pull-up e interrupción activada por flanco descendente.
+* **Señalización Visual:** LEDs indicadores de estado conectados a GPIO4 (alerta de pánico) y GPIO5 (monitoreo de red celular y transmisión).
 
 A continuación se muestra el ensamblaje en el protoboard:
 
