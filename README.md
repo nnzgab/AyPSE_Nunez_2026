@@ -29,7 +29,7 @@ El prototipo físico fue ensamblado y probado sobre el banco de trabajo utilizan
 * **Microcontrolador:** Espressif ESP32-C6 operando con el framework ESP-IDF v6.0.1.
 * **Módem Celular:** Quectel EG915U-LA montado sobre la placa de evaluación Quectel UMTS&LTE EVB, alimentado mediante la línea VBAT.
 * **Interfaz UART:** Bus serie UART1 configurado a 115200 baudios (TX en GPIO18, RX en GPIO19).
-* **Línea PWRKEY:** Transistor de control conectado a GPIO6 para la secuencia de encendido por pulso (2,1 s).
+* **Línea PWRKEY:** Transistor de control conectado a GPIO6 para la secuencia de encendido por pulso.
 * **Entrada de Alerta:** Pulsador de pánico con resistencia pull-up e interrupción activada por flanco descendente.
 
 A continuación se muestra el ensamblaje en el protoboard:
@@ -49,7 +49,7 @@ Para respaldar la validación funcional en hardware real, se grabó un video dem
 * Proceso de registro en la red celular LTE y obtención de la dirección IP por PDP.
 * Presión del pulsador de pánico y disparo inmediato de la interrupción por hardware.
 * Parpadeo rápido del LED indicador durante la ráfaga de transmisión del socket TCP.
-* Impresión en la consola de la trama enviada con el IMEI real y la recepción de la respuesta ACK (OK) del servidor remoto.
+* Impresión en la consola de la trama enviada con el IMEI real y la recepción de la respuesta ACK del servidor remoto.
 
 **Hacé clic en la imagen a continuación para ver el video:**
 
@@ -63,7 +63,8 @@ Para respaldar la validación funcional en hardware real, se grabó un video dem
 
 ## Arquitectura del Sistema
 
-La implementación se organiza mediante una arquitectura por capas estricta: **Aplicación → Middleware → Board Support → Driver HAL → ESP-IDF**. Esta separación permite mantener aislada la lógica de la aplicación respecto de los detalles específicos del hardware.
+La implementación se organiza mediante una arquitectura por capas estricta: 
+**Aplicación → Middleware → Board Support → Driver HAL → ESP-IDF**. Esta separación permite mantener aislada la lógica de la aplicación respecto de los detalles específicos del hardware.
 
 <p align="center">
   <img src="https://github.com/nnzgab/AyPSE_Nunez_2026/blob/prueba_02_arregando_BSP/documentaci%C3%B3n/im%C3%A1genes/diagrama_bloque.png?raw=true" alt="Diagrama general del sistema" width="700">
