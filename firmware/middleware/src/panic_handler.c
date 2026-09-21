@@ -1,10 +1,27 @@
+/**
+ * @file panic_handler.c
+ * @author Nuñez Gabriel Eduardo (nunezgabrieleduardo@gmail.com)
+ * @brief Panic Handler Middleware implementation.
+ * @version 0.1
+ * @date 2026-09-20
+ * @copyright Copyright (c) 2026
+ */
+
+/*==================[inclusions]=============================================*/
 #include "panic_handler.h"
 #include "panic_button.h"   /* Capa BSP: PanicButtonInit, PanicButtonIsPressed, PanicButtonAttachInterrupt */
 #include "board_clock.h"    /* Capa BSP: BoardClockGetMs */
 #include <stddef.h>
 
+/*==================[macros and definitions]=================================*/
 #define DEBOUNCE_TIME_MS      50U
 
+/*==================[internal data declaration]==============================*/
+
+/*==================[internal functions declaration]=========================*/
+static void PanicHandler_OnButtonISR(void *arg);
+
+/*==================[internal data definition]===============================*/
 static panic_event_cb_t s_panic_cb = NULL;
 static uint16_t          s_sequence_number = 1U;
 
@@ -13,9 +30,12 @@ static volatile bool     s_isr_flag = false;
 static uint32_t          s_isr_timestamp_ms = 0U;
 static bool              s_debounce_pending = false;
 
-/* ============================================================================
- * ISR interna del pulsador (Callback registrado en el BSP)
- * ============================================================================ */
+/*==================[external data definition]===============================*/
+
+/*==================[internal functions definition]==========================*/
+/**
+ * @brief ISR interna del pulsador (Callback registrado en el BSP).
+ */
 static void PanicHandler_OnButtonISR(void *arg) {
     (void)arg;
     if (!s_debounce_pending) {
@@ -23,9 +43,7 @@ static void PanicHandler_OnButtonISR(void *arg) {
     }
 }
 
-/* ============================================================================
- * Inicialización del Módulo (100% C puro, agnóstico de RTOS)
- * ============================================================================ */
+/*==================[external functions definition]==========================*/
 panic_handler_err_t PanicHandler_Init(panic_event_cb_t callback) {
     if (callback == NULL) {
         return PANIC_HANDLER_ERR_PARAM;
@@ -47,9 +65,6 @@ panic_handler_err_t PanicHandler_Init(panic_event_cb_t callback) {
     return PANIC_HANDLER_OK;
 }
 
-/* ============================================================================
- * Función de Pasada No Bloqueante (RunStep - Estándar C Puro)
- * ============================================================================ */
 void PanicHandler_RunStep(void) {
     uint32_t now = BoardClockGetMs();
 
@@ -75,3 +90,5 @@ void PanicHandler_RunStep(void) {
         }
     }
 }
+
+/*==================[end of file]============================================*/

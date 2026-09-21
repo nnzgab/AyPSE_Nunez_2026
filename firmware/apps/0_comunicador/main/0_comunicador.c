@@ -1,3 +1,19 @@
+/*! @mainpage Sistema de Alerta de Pánico Celular
+ *  @section genDesc General Description
+ *  Aplicación principal del comunicador celular de alerta de pánico sobre ESP32.
+ *  Coordina la detección del botón de pánico, empaquetado de tramas de evento,
+ *  servicio de red celular LTE y señalización por LEDs de estado en un bucle
+ *  no bloqueante.
+ * 
+ *  @author Nuñez Gabriel Eduardo (nunezgabrieleduardo@gmail.com)
+ *
+ *  @section changelog
+ *  |   Date     | Description                                    |
+ *  |:----------:|:-----------------------------------------------|
+ *  | 20/09/2026 | Document creation and initial implementation  |
+ */
+
+/*==================[inclusions]=============================================*/
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -9,18 +25,31 @@
 #include "event_frame.h"
 #include "cellular_net.h"
 
-/* Configuración de temporización visual */
-#define PANIC_LED_HOLD_TIME_MS  2000U
-#define STABILIZATION_WAIT_SEC  5U
+/*==================[macros and definitions]=================================*/
+/* Configuración de temporización visual y estabilización */
+#define PANIC_LED_HOLD_TIME_MS   2000U
+#define STABILIZATION_WAIT_SEC   5U
+#define STABILIZATION_STEP_MS    1000U
+#define     MAIN_LOOP_PERIOD_MS      20U
 
+/*==================[internal data declaration]==============================*/
+
+/*==================[internal functions declaration]=========================*/
+static void OnPanicEvent(uint16_t sequence_number);
+static void UpdateStatusLedFromNetwork(void);
+
+/*==================[internal data definition]===============================*/
 /* Estado del LED de Pánico */
 static uint32_t s_panic_led_timer_ms = 0;
 static bool     s_panic_led_active   = false;
 static bool     s_ready_announced    = false;
 
-/* ============================================================================
- * Callback de Evento de Pánico (Invocado por panic_handler tras debounce)
- * ============================================================================ */
+/*==================[external data definition]===============================*/
+
+/*==================[internal functions definition]==========================*/
+/**
+ * @brief Callback de Evento de Pánico (Invocado por panic_handler tras debounce).
+ */
 static void OnPanicEvent(uint16_t sequence_number) {
     printf("\n========================================\n");
     printf(" ¡ALERTA DE PANICO DETECTADA! (Secuencia: %u)\n", sequence_number);
@@ -65,57 +94,57 @@ static void OnPanicEvent(uint16_t sequence_number) {
     }
 }
 
-/* ============================================================================
- * Mapeo de Estados: CellularNet FSM -> StatusIndicator LED Pattern
- * ============================================================================ */
+/**
+ * @brief Mapeo de Estados: CellularNet FSM -> StatusIndicator LED Pattern.
+ */
 static void UpdateStatusLedFromNetwork(void) {
     cellular_net_status_t net_status = CellularNet_GetStatus();
 
     switch (net_status.state) {
-        case CELL_STATE_OFF:
-            StatusIndicator_SetCellular(CELLULAR_STATUS_OFF);
-            s_ready_announced = false;
-            break;
+    case CELL_STATE_OFF:
+        StatusIndicator_SetCellular(CELLULAR_STATUS_OFF);
+        s_ready_announced = false;
+        break;
 
-        case CELL_STATE_STARTING:
-            StatusIndicator_SetCellular(CELLULAR_STATUS_STARTING);
-            s_ready_announced = false;
-            break;
+    case CELL_STATE_STARTING:
+        StatusIndicator_SetCellular(CELLULAR_STATUS_STARTING);
+        s_ready_announced = false;
+        break;
 
-        case CELL_STATE_CONNECTING:
-            StatusIndicator_SetCellular(CELLULAR_STATUS_SEARCHING);
-            s_ready_announced = false;
-            break;
+    case CELL_STATE_CONNECTING:
+        StatusIndicator_SetCellular(CELLULAR_STATUS_SEARCHING);
+        s_ready_announced = false;
+        break;
 
-        case CELL_STATE_READY:
-            /* Solo actualizar a READY si no se está ejecutando una ráfaga de TRANSMITTING activa */
-            if (StatusIndicator_GetCellular() != CELLULAR_STATUS_TRANSMITTING) {
-                StatusIndicator_SetCellular(CELLULAR_STATUS_READY);
-            }
-            if (!s_ready_announced) {
-                s_ready_announced = true;
-                printf("\n==================================================\n");
-                printf(" ¡RED CELULAR CONECTADA Y LISTA (CELL_STATE_READY)!\n");
-                printf(" Presione el botón de pánico para emitir alertas.\n");
-                printf("==================================================\n\n");
-            }
-            break;
+    case CELL_STATE_READY:
+        if (StatusIndicator_GetCellular() != CELLULAR_STATUS_TRANSMITTING) {
+            StatusIndicator_SetCellular(CELLULAR_STATUS_READY);
+        }
+        if (!s_ready_announced) {
+            s_ready_announced = true;
+            printf("\n==================================================\n");
+            printf(" ¡RED CELULAR CONECTADA Y LISTA (CELL_STATE_READY)!\n");
+            printf(" Presione el botón de pánico para emitir alertas.\n");
+            printf("==================================================\n\n");
+        }
+        break;
 
-        case CELL_STATE_ERROR:
-            StatusIndicator_SetCellular(CELLULAR_STATUS_OFF);
-            s_ready_announced = false;
-            break;
+    case CELL_STATE_ERROR:
+        StatusIndicator_SetCellular(CELLULAR_STATUS_OFF);
+        s_ready_announced = false;
+        break;
 
-        default:
-            StatusIndicator_SetCellular(CELLULAR_STATUS_OFF);
-            s_ready_announced = false;
-            break;
+    default:
+        StatusIndicator_SetCellular(CELLULAR_STATUS_OFF);
+        s_ready_announced = false;
+        break;
     }
 }
 
-/* ============================================================================
- * Bucle Principal de la Aplicación (ESP32 app_main)
- * ============================================================================ */
+/*==================[external functions definition]==========================*/
+/**
+ * @brief Bucle Principal de la Aplicación (ESP32 app_main).
+ */
 void app_main(void) {
     printf("\n==================================================\n");
     printf(" INICIALIZANDO SISTEMA DE ALERTA DE PANICO CELULAR\n");
@@ -142,7 +171,7 @@ void app_main(void) {
     printf("[SISTEMA] Esperando estabilización de alimentación (%u segundos):\n", STABILIZATION_WAIT_SEC);
     for (int i = STABILIZATION_WAIT_SEC; i > 0; i--) {
         printf(" -> Estabilizando alimentación... %d s\n", i);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(STABILIZATION_STEP_MS));
     }
     printf("[SISTEMA] Alimentación estabilizada. Inicializando servicio celular...\n");
     printf("--------------------------------------------------\n\n");
@@ -159,16 +188,10 @@ void app_main(void) {
 
     /* 5. Bucle Principal de Ejecución No Bloqueante */
     for (;;) {
-        /* Pasada de la FSM de detección de pulsación y debounce */
         PanicHandler_RunStep();
-
-        /* Pasada del temporizador y parpadeo de LEDs de estado */
         StatusIndicator_RunStep();
-
-        /* Actualización del patrón LED según el estado de la red celular */
         UpdateStatusLedFromNetwork();
 
-        /* Gestión del temporizador de apagado del LED de pánico (auto-off tras 2s) */
         if (s_panic_led_active) {
             uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
             if ((now - s_panic_led_timer_ms) >= PANIC_LED_HOLD_TIME_MS) {
@@ -177,7 +200,8 @@ void app_main(void) {
             }
         }
 
-        /* Liberar tiempo de CPU para la tarea de red y el sistema */
-        vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(pdMS_TO_TICKS(MAIN_LOOP_PERIOD_MS));
     }
 }
+
+/*==================[end of file]============================================*/

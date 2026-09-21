@@ -1,3 +1,13 @@
+/**
+ * @file cellular_net.c
+ * @author Nuñez Gabriel Eduardo (nunezgabrieleduardo@gmail.com)
+ * @brief Cellular Network Middleware implementation.
+ * @version 0.1
+ * @date 2026-09-20
+ * @copyright Copyright (c) 2026
+ */
+
+ /*==================[inclusions]=============================================*/
 #include "cellular_net.h"
 #include "cellular_modem.h"
 #include "event_frame.h"
@@ -7,6 +17,9 @@
 #include "freertos/queue.h"
 #include <string.h>
 #include <stdio.h>
+
+
+/*==================[macros and definitions]=================================*/
 
 /* ============================================================================
  *  Configuración de red y servidor
@@ -19,10 +32,38 @@
 #define SERVER_PORT             33433
 #define SOCKET_PROTO            "TCP"
 
-#define QUEUE_LENGTH            5
-#define MAX_CONSECUTIVE_ERRORS  3
-#define DEFAULT_FALLBACK_IMEI   "123456789012345"
+//#define QUEUE_LENGTH            5
+//#define MAX_CONSECUTIVE_ERRORS  3
+//#define DEFAULT_FALLBACK_IMEI   "123456789012345"
 
+/* Parámetros de Red y Módem */
+#define QUEUE_LENGTH                5U
+#define MAX_CONSECUTIVE_ERRORS      3U
+#define DEFAULT_FALLBACK_IMEI       "123456789012345"
+#define CELL_NET_RSSI_UNKNOWN       99U
+#define IMEI_BUF_SIZE               (IMEI_LEN_BYTES + 1U)
+
+/* Temporizaciones y Reintentos de FSM (ms) */
+#define STARTUP_AT_CHECK_RETRIES    3U
+#define STARTUP_AT_CHECK_INTERVAL_MS 200U
+#define MODEM_BOOT_TIMEOUT_MS       6000U
+#define ERROR_STATE_PAUSE_MS        5000U
+
+/* Timeouts y Cadencias de FreeRTOS (ms) */
+#define QUEUE_RECEIVE_TIMEOUT_MS    100U
+#define NOT_READY_POLL_INTERVAL_MS  500U
+#define TASK_LOOP_CYCLE_MS          50U
+
+/* Recursos de la Tarea FreeRTOS */
+#define CELL_NET_TASK_STACK_SIZE    4096U
+#define CELL_NET_TASK_PRIORITY      5U
+
+/* Buffers de Socket */
+#define SOCKET_RX_BUF_SIZE          64U
+
+
+
+/*==================[internal data declaration]==============================*/
 /* ============================================================================
  *  Tipos y Estructuras Internas
  * ============================================================================ */
@@ -31,9 +72,18 @@ typedef struct {
     uint16_t length;
 } alert_event_t;
 
+
+/*==================[internal functions declaration]=========================*/
+
+static void CellularNet_FsmStep(void);
+static bool CellularNet_TransmitFrame(const uint8_t *payload, uint16_t length);
+static void CellularNet_TaskRoutine(void *pvParameters);
+
+/*==================[internal data definition]===============================*/
+
 static cellular_net_status_t g_net_status = {
     .state = CELL_STATE_OFF,
-    .rssi = 99,
+    .rssi = CELL_NET_RSSI_UNKNOWN,
     .consecutive_errors = 0,
     .uptime_seconds = 0
 };
@@ -42,8 +92,12 @@ static QueueHandle_t g_alert_queue = NULL;
 static uint32_t g_last_tick_sec = 0;
 
 /* Storage seguro de IMEI dentro de la tarea de red (evita colisión de UART) */
-static char g_modem_imei[16] = DEFAULT_FALLBACK_IMEI;
+static char g_modem_imei[IMEI_BUF_SIZE] = DEFAULT_FALLBACK_IMEI;
 static bool g_imei_read_ok = false;
+
+/*==================[external data definition]===============================*/
+
+/*==================[internal functions definition]==========================*/
 
 /* ============================================================================
  *  FSM Interna del Módem Celular
@@ -63,14 +117,14 @@ static void CellularNet_FsmStep(void) {
         printf("[CELL_NET] Iniciando verificación de arranque del módem...\n");
 
         // Paso A: Probar si el módem ya está encendido y respondiendo AT
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < STARTUP_AT_CHECK_RETRIES; i++) {
             if (CellularModemIsReady()) {
                 printf("[CELL_NET] ¡Módem detectado encendido! Pasando a CONNECTING...\n");
                 g_net_status.state = CELL_STATE_CONNECTING;
                 g_net_status.consecutive_errors = 0;
                 return;
             }
-            vTaskDelay(pdMS_TO_TICKS(200));
+            vTaskDelay(pdMS_TO_TICKS(STARTUP_AT_CHECK_INTERVAL_MS));
         }
 
         // Paso B: Si no responde AT, aplicar 1 pulso de encendido PWRKEY
@@ -79,7 +133,7 @@ static void CellularNet_FsmStep(void) {
 
         // Paso C: Esperar inicialización del módem y respuesta AT
         printf("[CELL_NET] Esperando respuesta del módem (hasta 6s)...\n");
-        if (CellularModemWaitBoot(6000) || CellularModemIsReady()) {
+        if (CellularModemWaitBoot(MODEM_BOOT_TIMEOUT_MS) || CellularModemIsReady()) {
             printf("[CELL_NET] Módem respondió AT tras PWRKEY. Pasando a CONNECTING...\n");
             g_net_status.state = CELL_STATE_CONNECTING;
             g_net_status.consecutive_errors = 0;
@@ -143,7 +197,7 @@ static void CellularNet_FsmStep(void) {
 
     case CELL_STATE_ERROR:
         printf("[CELL_NET] En estado de error (fallos acumulados: %u). Pausa pasiva de 5s...\n", g_net_status.consecutive_errors);
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(ERROR_STATE_PAUSE_MS));
         // Volver a STARTING donde primero probará AT sin forzar apagado duro
         g_net_status.state = CELL_STATE_STARTING;
         break;
@@ -159,7 +213,7 @@ static void CellularNet_FsmStep(void) {
 static bool CellularNet_TransmitFrame(const uint8_t *payload, uint16_t length) {
     bool tx_ok = false;
 
-    /* 🟢 Activar ráfaga visual rápida de transmisión en LED QUECTEL (125ms ON / 125ms OFF) */
+    /* Activar ráfaga visual rápida de transmisión en LED QUECTEL (125ms ON / 125ms OFF) */
     StatusIndicator_SetCellular(CELLULAR_STATUS_TRANSMITTING);
 
     printf("[CELL_NET] Trama desapilada de la cola (%u bytes). Intentando abrir socket TCP (%s %s:%u)...\n",
@@ -171,7 +225,7 @@ static bool CellularNet_TransmitFrame(const uint8_t *payload, uint16_t length) {
         if (CellularModemSocketSend(payload, length)) {
             printf("[CELL_NET] Datos enviados correctamente (SEND OK). Verificando respuesta del servidor...\n");
             
-            uint8_t rx_buffer[64];
+            uint8_t rx_buffer[SOCKET_RX_BUF_SIZE];
             uint16_t rx_bytes = 0;
 
             if (CellularModemSocketReceive(rx_buffer, sizeof(rx_buffer) - 1, &rx_bytes) && rx_bytes > 0) {
@@ -199,7 +253,7 @@ static bool CellularNet_TransmitFrame(const uint8_t *payload, uint16_t length) {
         printf("[CELL_NET] [TX EXITOSA] Alerta entregada a la red y socket cerrado correctamente.\n");
     }
 
-    /* 🟢 Restablecer indicación visual de reposo READY (500ms ON / 500ms OFF) */
+    /* Restablecer indicación visual de reposo READY (500ms ON / 500ms OFF) */
     StatusIndicator_SetCellular(CELLULAR_STATUS_READY);
 
     return tx_ok;
@@ -218,7 +272,7 @@ static void CellularNet_TaskRoutine(void *pvParameters) {
 
         // 2. Si la red está lista, procesamos las alertas de la cola
         if (g_net_status.state == CELL_STATE_READY) {
-            if (xQueueReceive(g_alert_queue, &event, pdMS_TO_TICKS(100)) == pdTRUE) {
+            if (xQueueReceive(g_alert_queue, &event, pdMS_TO_TICKS(QUEUE_RECEIVE_TIMEOUT_MS)) == pdTRUE) {
                 if (!CellularNet_TransmitFrame(event.payload, event.length)) {
                     g_net_status.consecutive_errors++;
                     
@@ -230,12 +284,14 @@ static void CellularNet_TaskRoutine(void *pvParameters) {
                 }
             }
         } else {
-            vTaskDelay(pdMS_TO_TICKS(500));
+            vTaskDelay(pdMS_TO_TICKS(NOT_READY_POLL_INTERVAL_MS));
         }
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(TASK_LOOP_CYCLE_MS));
     }
 }
+
+/*==================[external functions definition]==========================*/
 
 /* ============================================================================
  *  API Pública del Módulo Cellular Net
@@ -257,7 +313,15 @@ cellular_net_err_t CellularNet_Init(void) {
 
     g_net_status.state = CELL_STATE_STARTING;
 
-    xTaskCreate(CellularNet_TaskRoutine, "cell_net_task", 4096, NULL, 5, NULL);
+    //xTaskCreate(CellularNet_TaskRoutine, "cell_net_task", 4096, NULL, 5, NULL);
+    // Validación del retorno de la creación de la tarea
+    BaseType_t ret = xTaskCreate(CellularNet_TaskRoutine, "cell_net_task", CELL_NET_TASK_STACK_SIZE, NULL, CELL_NET_TASK_PRIORITY, NULL);
+    if (ret != pdPASS) {
+        vQueueDelete(g_alert_queue);
+        g_alert_queue = NULL;
+        g_net_status.state = CELL_STATE_ERROR;
+        return CELL_NET_ERR_NOT_READY;
+    }
 
     return CELL_NET_OK;
 }
@@ -290,12 +354,14 @@ bool CellularNet_IsReady(void) {
     return (g_net_status.state == CELL_STATE_READY);
 }
 
-/* 🟢 Obtención segura de IMEI expuesta por el módulo de red */
+/* Obtención segura de IMEI expuesta por el módulo de red */
 bool CellularNet_GetIMEI(char *imei_out, size_t max_len) {
-    if (imei_out == NULL || max_len < 16) {
+    if (imei_out == NULL || max_len < IMEI_BUF_SIZE) {
         return false;
     }
-    strncpy(imei_out, g_modem_imei, 15);
-    imei_out[15] = '\0';
+    strncpy(imei_out, g_modem_imei, IMEI_LEN_BYTES);
+    imei_out[IMEI_LEN_BYTES] = '\0';
     return g_imei_read_ok;
 }
+
+/*==================[end of file]============================================*/

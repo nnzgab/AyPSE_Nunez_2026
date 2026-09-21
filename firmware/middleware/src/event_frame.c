@@ -1,11 +1,31 @@
+/**
+ * @file event_frame.c
+ * @author Nuñez Gabriel Eduardo (nunezgabrieleduardo@gmail.com)
+ * @brief Event Frame Serialization Middleware implementation.
+ * @version 0.1
+ * @date 2026-09-20
+ * @copyright Copyright (c) 2026
+ */
+
+/*==================[inclusions]=============================================*/
 #include "event_frame.h"
 #include <stdio.h>
 #include <string.h>
 
-event_frame_err_t EventFrame_PackBinary(const event_data_t *event, 
-                                       uint8_t *buffer_out, 
-                                       size_t buffer_size, 
-                                       uint16_t *packed_len) {
+/*==================[macros and definitions]=================================*/
+
+/*==================[internal data declaration]==============================*/
+
+/*==================[internal functions declaration]=========================*/
+
+/*==================[internal data definition]===============================*/
+
+/*==================[external data definition]===============================*/
+
+/*==================[internal functions definition]==========================*/
+
+/*==================[external functions definition]==========================*/
+event_frame_err_t EventFrame_PackBinary(const event_data_t *event, uint8_t *buffer_out, size_t buffer_size, uint16_t *packed_len) {
     if (event == NULL || buffer_out == NULL || packed_len == NULL) {
         return EVENT_FRAME_ERR_PARAM;
     }
@@ -37,10 +57,7 @@ event_frame_err_t EventFrame_PackBinary(const event_data_t *event,
     return EVENT_FRAME_OK;
 }
 
-event_frame_err_t EventFrame_PackText(const event_data_t *event, 
-                                     char *buffer_out, 
-                                     size_t buffer_size, 
-                                     uint16_t *packed_len) {
+event_frame_err_t EventFrame_PackText(const event_data_t *event, char *buffer_out, size_t buffer_size, uint16_t *packed_len) {
     if (event == NULL || buffer_out == NULL || packed_len == NULL) {
         return EVENT_FRAME_ERR_PARAM;
     }
@@ -59,3 +76,5 @@ event_frame_err_t EventFrame_PackText(const event_data_t *event,
     *packed_len = (uint16_t)written;
     return EVENT_FRAME_OK;
 }
+
+/*==================[end of file]============================================*/

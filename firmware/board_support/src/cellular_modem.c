@@ -1,17 +1,47 @@
+/**
+ * @file cellular_modem.c
+ * @author Nuñez Gabriel Eduardo (nunezgabrieleduardo@gmail.com)
+ * @brief Cellular Modem BSP driver implementation.
+ * @version 0.1
+ * @date 2026-09-03
+ * @copyright Copyright (c) 2026
+ */
+
+
+/*==================[inclusions]=============================================*/
 #include "cellular_modem.h"
 #include <string.h>
 #include <stdio.h>
-
 
 #include "gpio_hal.h"
 #include "uart_hal.h"
 #include "board_config.h"
 
-#define PWRKEY_STABILIZATION_MS  31U
-#define PWRKEY_PULSE_TIME_MS     2100U
+/*==================[macros and definitions]=================================*/
 
-#define PWRKEY_OFF_TIME_MS       3200U
-#define PWRKEY_OFF_PULSE_MS      5000U
+// Tiempos de hardware
+#define PWRKEY_STABILIZATION_MS     31U
+#define PWRKEY_PULSE_TIME_MS        2100U
+
+#define PWRKEY_OFF_TIME_MS          3200U
+#define PWRKEY_OFF_PULSE_MS         5000U
+
+// Buffers de implementación interna
+#define MODEM_AT_CMD_BUF_SIZE       128U  // Tamaño estándar para construir comandos AT
+#define MODEM_AT_RESP_BUF_SIZE      256U  // Tamaño estándar para respuestas breves/URC
+#define MODEM_SOCKET_DATA_BUF_SIZE  512U // Tamaño para recepción de datos en sockets
+
+/*==================[internal data declaration]==============================*/
+
+/*==================[internal functions declaration]=========================*/
+
+/*==================[internal data definition]===============================*/
+
+/*==================[external data definition]===============================*/
+
+/*==================[internal functions definition]==========================*/
+
+/*==================[external functions definition]==========================*/
 
 
 /* ============================================================================
@@ -54,7 +84,7 @@ bool CellularModemHardPowerOff(void)
 
 bool CellularModemWaitBoot(uint32_t timeout_ms)
 {
-    char response[128];
+    char response[MODEM_AT_RESP_BUF_SIZE];
     int len = UartHalReadBytes(response, sizeof(response) - 1, timeout_ms);
 
     if (len <= 0) {
@@ -72,7 +102,7 @@ bool CellularModemWaitBoot(uint32_t timeout_ms)
 
 bool CellularModemIsReady(void)
 {
-    char response[64];
+    char response[MODEM_AT_RESP_BUF_SIZE];
     
     // Limpiamos basura en buffer antes de enviar
     UartHalWriteBytes("AT\r\n", 4);
@@ -88,7 +118,7 @@ bool CellularModemIsReady(void)
 
 bool CellularModemIsSimReady(void)
 {
-    char response[128];
+    char response[MODEM_AT_RESP_BUF_SIZE];
 
     // Consulta el estado de la SIM
     UartHalWriteBytes("AT+CPIN?\r\n", 10);
@@ -106,7 +136,7 @@ bool CellularModemIsSimReady(void)
 
 bool CellularModemIsNetworkRegistered(void)
 {
-    char response[128];
+    char response[MODEM_AT_RESP_BUF_SIZE];
 
     // Consulta el estado de registro en red LTE/EPS
     UartHalWriteBytes("AT+CEREG?\r\n", 11);
@@ -137,7 +167,7 @@ bool CellularModemGetIMEI(char *imei_out, size_t max_len)
     }
 
     // CORRECCIÓN 1: Declarar como un buffer de tamaño suficiente
-    char response[64]; 
+    char response[MODEM_AT_RESP_BUF_SIZE]; 
     
     // 1. Enviar el comando AT+CGSN directamente por la UART
     UartHalWriteBytes("AT+CGSN\r\n", 9);
@@ -186,8 +216,8 @@ bool CellularModemConfigurePdp(const char *apn, const char *username, const char
         return false;
     }
 
-    char cmd[256];
-    char response[128];
+    char cmd[MODEM_AT_CMD_BUF_SIZE];
+    char response[MODEM_AT_RESP_BUF_SIZE];
 
     const char *user = (username != NULL) ? username : "";
     const char *pass = (password != NULL) ? password : "";
@@ -211,7 +241,7 @@ bool CellularModemConfigurePdp(const char *apn, const char *username, const char
 
 bool CellularModemActivatePdp(void)
 {
-    char response[128];
+    char response[MODEM_AT_RESP_BUF_SIZE];
 
     // Activa el contexto PDP 1
     UartHalWriteBytes("AT+QIACT=1\r\n", 12);
@@ -230,7 +260,7 @@ bool CellularModemActivatePdp(void)
 
 bool CellularModemIsPdpActive(char *ip_address, size_t ip_address_size)
 {
-    char response[128];
+    char response[MODEM_AT_RESP_BUF_SIZE];
 
     // Consulta los contextos PDP activos y sus IP asignadas
     UartHalWriteBytes("AT+QIACT?\r\n", 11);
@@ -282,8 +312,8 @@ bool CellularModemSocketOpen(const char *proto, const char *ip, uint16_t port)
         return false;
     }
 
-    char cmd[256];
-    char response[128];
+    char cmd[MODEM_AT_CMD_BUF_SIZE];
+    char response[MODEM_AT_RESP_BUF_SIZE];
 
     // AT+QIOPEN=<contextID>,<connectID>,"<service_type>","<IP>",<port>
     snprintf(cmd, sizeof(cmd), "AT+QIOPEN=1,0,\"%s\",\"%s\",%u,0,0\r\n", proto, ip, port);
@@ -307,8 +337,8 @@ bool CellularModemSocketSend(const uint8_t *payload, uint16_t length)
         return false;
     }
 
-    char cmd[64];
-    char response[128];
+    char cmd[MODEM_AT_CMD_BUF_SIZE];
+    char response[MODEM_AT_RESP_BUF_SIZE];
 
     // AT+QISEND=<connectID>,<length>
     snprintf(cmd, sizeof(cmd), "AT+QISEND=0,%u\r\n", length);
@@ -335,7 +365,7 @@ bool CellularModemSocketSend(const uint8_t *payload, uint16_t length)
 
 bool CellularModemSocketClose(void)
 {
-    char response[64];
+    char response[MODEM_AT_RESP_BUF_SIZE];
 
     // AT+QICLOSE=<connectID>
     UartHalWriteBytes("AT+QICLOSE=0\r\n", 14);
@@ -356,8 +386,8 @@ bool CellularModemSocketReceive(uint8_t *buffer_out, uint16_t max_len, uint16_t 
     }
 
     // CORRECCIÓN: Declarar como buffers (arreglos)
-    char cmd[32];
-    char response[512]; // Debe ser mayor a max_len + encabezados AT
+    char cmd[MODEM_AT_CMD_BUF_SIZE];
+    char response[MODEM_SOCKET_DATA_BUF_SIZE]; // Debe ser mayor a max_len + encabezados AT
 
     // 1. Solicitar la lectura de bytes del socket 0 vía AT+QIRD
     snprintf(cmd, sizeof(cmd), "AT+QIRD=0,%u\r\n", max_len);

@@ -1,18 +1,37 @@
-#include "led.h"
+/**
+ * @file led.c
+ * @author Nuñez Gabriel Eduardo (nunezgabrieleduardo@gmail.com)
+ * @brief LED BSP driver implementation.
+ * @version 0.1
+ * @date 2026-09-03
+ * @copyright Copyright (c) 2026
+ */
 
+
+ /*==================[inclusions]=============================================*/
+#include "led.h"
 #include "gpio_hal.h"
 #include "board_config.h"
 
+/*==================[macros and definitions]=================================*/
+
+/*==================[internal data declaration]==============================*/
+
+/*==================[internal functions declaration]=========================*/
+
+/*==================[internal data definition]===============================*/
+
+/*==================[external data definition]===============================*/
+
+/*==================[internal functions definition]==========================*/
 
 /*==================[external functions definition]==========================*/
 
 bool LedInit(void) {
     GPIOInit(GPIO_PANIC_LED_STATUS, GPIO_OUTPUT);
     GPIOInit(GPIO_QUECTEL_LED_STATUS, GPIO_OUTPUT);
-    
     GPIOOff(GPIO_PANIC_LED_STATUS);
     GPIOOff(GPIO_QUECTEL_LED_STATUS);
-
     return true;
 }
 
