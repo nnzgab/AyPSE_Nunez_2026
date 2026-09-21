@@ -64,7 +64,8 @@ Para respaldar la validación funcional en hardware real, se grabó un video dem
 ## Arquitectura del Sistema
 
 La implementación se organiza mediante una arquitectura por capas estricta: <br>
-**Aplicación → Middleware → Board Support → Driver HAL → ESP-IDF**. Esta separación permite mantener aislada la lógica de la aplicación respecto de los detalles específicos del hardware.
+**Aplicación → Middleware → Board Support → Driver HAL → ESP-IDF**. <br>
+Esta separación permite mantener aislada la lógica de la aplicación respecto de los detalles específicos del hardware.
 
 <p align="center">
   <img src="https://github.com/nnzgab/AyPSE_Nunez_2026/blob/prueba_02_arregando_BSP/documentaci%C3%B3n/im%C3%A1genes/diagrama_bloque.png?raw=true" alt="Diagrama general del sistema" width="700">
