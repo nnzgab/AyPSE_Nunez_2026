@@ -3,7 +3,7 @@
  * @author Nuñez Gabriel Eduardo (nunezgabrieleduardo@gmail.com)
  * @brief Cellular Network Middleware implementation.
  * @version 0.1
- * @date 2026-09-20
+ * @date 2026-09-21
  * @copyright Copyright (c) 2026
  */
 
