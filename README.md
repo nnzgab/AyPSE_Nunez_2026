@@ -158,6 +158,6 @@ firmware/
 
 <p align="center">
   <img src="https://github.com/nnzgab/AyPSE_Nunez_2026/blob/main/documentaci%C3%B3n/im%C3%A1genes/Captura%20desde%202026-09-21%2023-21-56.png?raw=true" alt="Consola Serie / Logs" width="70%">
-  <br>|
+  <br>
   <em>Log real por consola serie mostrando la conexión LTE y la transmisión de trama TCP</em>
 
